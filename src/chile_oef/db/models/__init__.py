@@ -14,6 +14,7 @@ from chile_oef.db.models.catalog import (
     SourceEndpoint,
     SourceEvent,
 )
+from chile_oef.db.models.forecast import ForecastCellMagnitudeBin, ForecastRun
 from chile_oef.db.models.seismicity import (
     CompletenessEstimate,
     EventDeclusteringClassification,
@@ -50,6 +51,8 @@ __all__ = [
     "EventRevision",
     "EventTectonicClassification",
     "FaultTrace",
+    "ForecastCellMagnitudeBin",
+    "ForecastRun",
     "GutenbergRichterEstimate",
     "IngestionArtifact",
     "IngestionRun",

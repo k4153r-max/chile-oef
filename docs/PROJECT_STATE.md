@@ -708,14 +708,97 @@ itself is cheap to compute (no optimizer, pure arithmetic over precomputed
 ETAS parameters), so this addition did not meaningfully increase suite
 runtime.
 
-Still not done for seismicity: no forecast, no public API endpoint for any
-of these ten models. Per docs/scientific-methodology.md's progression,
-CSEP/pyCSEP evaluation and walk-forward replay (Phase 6) is next -- which,
-per this file's own "Definition of done," cannot be honestly claimed as
-validated without genuine prospective/backtest evaluation, not just unit
-tests. The remaining IAS components (energy-proxy residual, spatial
-concentration, persistence, depth migration) and network-epoch awareness
-remain explicit future work, not silently implemented elsewhere.
+### Forecast generation layer implemented and validated (prerequisite for Phase 6)
+
+Added on 2026-08-16, same session, in response to a real gap found while
+scoping Phase 6 (CSEP/pyCSEP evaluation): nothing in the repository actually
+produced a registered `Forecast` matching docs/forecast-contract.md's
+schema. Every prior estimator (Mc, GR, declustering, background rate,
+Modified Omori, ETAS, IAS) is a statistical engine that produces
+*estimates*, not a versioned, immutable, per-cell/per-magnitude-bin
+forecast object with a validity window -- there was nothing concrete for a
+CSEP-style evaluation to score against reality. This closes that gap before
+Phase 6 begins, rather than attempting Phase 6 against a nonexistent
+artifact.
+
+- `config/forecast-specification.yaml` already existed from Phase 0
+  (horizons `PT6H`/`P1D`/`P3D`/`P7D`, five non-overlapping magnitude bins
+  `[3,4) [4,5) [5,6) [6,7) [7,inf)`, grid `chile_regular_0_1_v1`,
+  estimability/immutability policy) but was never read by any code until
+  now. `src/chile_oef/forecast/specification.py::load_forecast_specification`
+  parses it into typed dataclasses -- no bin scheme or horizon list was
+  invented; the Phase 0 design is used as written.
+- `src/chile_oef/forecast/generation.py::generate_forecast_cells`: pure
+  function computing, per grid cell and per magnitude bin, the expected
+  event count and Poisson probability of at least one event
+  (`1 - exp(-expected_count)`) over a validity window, from an already-fit
+  `SpatiotemporalEtasParameters` and an already-fit Gutenberg-Richter
+  `b_value`. Background is allocated to each cell proportional to its area
+  (homogeneous mu, per the spatiotemporal ETAS scoping decision); each
+  prior event's triggering contribution uses the same point-density-at-
+  cell-center approximation `background_rate.py` already established and
+  documented. Magnitude bins below the declared Mc are refused
+  (`support_state="not_estimable"`) rather than computed with a formula
+  that would silently exceed a valid probability -- forecast-contract.md's
+  explicit "target threshold below Mc" not-estimable condition.
+- Verified with three separate identities, not just a happy-path run: (1)
+  with zero prior events, every cell's expected count is exactly
+  proportional to its area (pure background, no triggering); (2) with
+  `b=1.0`, each successive one-magnitude-unit-wide bin carries exactly
+  1/10th the expected count of the previous one -- and the transition into
+  the final *open-ended* bin is verified to be exactly 1/9, not 1/10 (a
+  real, derived property of an open tail bin vs. a finite-width bin, caught
+  while writing the test, not assumed); (3) summed over a grid padded well
+  beyond the triggering kernel's reach, the total expected count across all
+  cells and bins recovers the region-wide total (background + triggering,
+  all magnitudes) to within the same ~1-2% edge-effect tolerance already
+  established for `background_rate.py`'s and `spatiotemporal_etas.py`'s
+  analogous mass-conservation checks.
+- `db/models/forecast.py::ForecastRun` (append-only; mandatory FKs to the
+  specific `SpatiotemporalEtasEstimate` and `GutenbergRichterEstimate` used,
+  plus `SpatialGrid`; self-referential `supersedes_forecast_run_id` for
+  recalculations, per forecast-contract.md's immutability rule -- "a
+  recalculation creates a new run," never an update) and
+  `ForecastCellMagnitudeBin` (one append-only row per cell per bin) +
+  Alembic migration `0013`.
+- `ForecastService.issue_forecast` refuses to mix a Gutenberg-Richter
+  estimate and a spatiotemporal ETAS estimate that trace back to different
+  `CompletenessEstimate` rows (different Mc/window lineage) -- verified
+  with a dedicated integration test using two independently-converged fits
+  over the *same* underlying catalog (so the refusal is specifically about
+  lineage consistency, not just "one of the inputs happened to fail").
+  Input catalog snapshot uses everything available as of `issued_at`
+  (which may be later than, and see more data than, the cited Mc/b/ETAS
+  fits' own original windows -- model/parameter-set version and input
+  catalog snapshot are versioned independently, per forecast-contract.md).
+  CLI: `chile-oef issue-forecast --spatiotemporal-etas-estimate-id <uuid>
+  --gutenberg-richter-estimate-id <uuid> --issued-at <iso8601>
+  --horizon-id <PT6H|P1D|P3D|P7D>`.
+- Known limitation, not yet addressed: `calibration_status` is fixed to
+  `"uncalibrated_point_forecast"` -- no parameter uncertainty from the
+  underlying MLE fits is propagated into these probabilities yet (a point
+  estimate only). Not yet conditioned on tectonic class or depth range,
+  both named as optional forecast-contract.md dimensions. The real
+  production grid (`chile_regular_0_1_v1`, 90,000 cells) x 5 magnitude bins
+  means ~450,000 `ForecastCellMagnitudeBin` rows per issued forecast --
+  correctness-tested only on small fixture grids so far; row volume at real
+  scale is a noted, not yet exercised, consideration.
+
+Final gate on 2026-08-16: **115 tests passed** (108 prior + 5 new unit +
+2 new integration), full suite confirmed green end to end. Ruff, `ruff
+format --check`, and `alembic check` all passed. Migration `0013` applied
+cleanly against the real dev database.
+
+Still not done for seismicity/forecasting: no public API endpoint for any
+of these eleven models or the new forecast layer -- everything is
+CLI/service-only. Per docs/scientific-methodology.md's progression,
+CSEP/pyCSEP evaluation and walk-forward replay (Phase 6) is next, now with
+an actual `ForecastRun` artifact to score -- which, per this file's own
+"Definition of done," cannot be honestly claimed as validated without
+genuine prospective/backtest evaluation, not just unit tests. The remaining
+IAS components (energy-proxy residual, spatial concentration, persistence,
+depth migration) and network-epoch awareness remain explicit future work,
+not silently implemented elsewhere.
 
 ## Verified static data releases
 
@@ -790,11 +873,19 @@ The following should be done next, in this order:
    Phase 5 started section above). Remaining IAS components from
    docs/ias.md (energy-proxy residual, spatial concentration, persistence,
    depth migration) and network-epoch awareness are explicit future work,
-   not next by default. Next per docs/scientific-methodology.md's
-   progression: CSEP/pyCSEP evaluation and walk-forward replay (Phase 6) --
+   not next by default.
+9. ~~Forecast generation layer~~ — done 2026-08-16 (see "Forecast
+   generation layer implemented and validated" section above). A real gap
+   found while scoping Phase 6: nothing previously produced a
+   forecast-contract.md-shaped `ForecastRun`. Next per
+   docs/scientific-methodology.md's progression: CSEP/pyCSEP evaluation and
+   walk-forward replay (Phase 6), now with an actual artifact to score --
    forecasts cannot be honestly claimed as validated before that gate, and
    per this file's "Definition of done," genuine prospective/backtest
-   evaluation is required, not just unit tests.
+   evaluation is required, not just unit tests. Remaining forecast-layer
+   gaps (parameter-uncertainty propagation, tectonic-class/depth
+   conditioning, spatially-varying background) are explicit future work,
+   not scheduled next by default.
 
 ## Known technical risks and decisions still to verify
 

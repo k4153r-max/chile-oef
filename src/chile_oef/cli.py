@@ -11,6 +11,8 @@ from chile_oef.app.settings import get_settings
 from chile_oef.datasets.service import DatasetVersionService
 from chile_oef.db.models import FaultTrace, SlabNode
 from chile_oef.db.session import SessionLocal
+from chile_oef.forecast.service import ForecastService
+from chile_oef.forecast.specification import load_forecast_specification
 from chile_oef.ingestion.raw_archive import RawArchive
 from chile_oef.ingestion.registry import load_source_registry
 from chile_oef.ingestion.service import IngestionService, sync_source_registry
@@ -165,6 +167,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ias.add_argument("--temporal-etas-estimate-id", type=uuid.UUID, required=True)
     ias.add_argument("--evaluation-end-at", type=_aware_datetime, required=True)
+
+    forecast = subparsers.add_parser(
+        "issue-forecast",
+        help="issue a grid-cell x magnitude-bin forecast from a spatiotemporal ETAS + GR fit",
+    )
+    forecast.add_argument("--spatiotemporal-etas-estimate-id", type=uuid.UUID, required=True)
+    forecast.add_argument("--gutenberg-richter-estimate-id", type=uuid.UUID, required=True)
+    forecast.add_argument("--issued-at", type=_aware_datetime, required=True)
+    forecast.add_argument("--horizon-id", required=True, help="e.g. PT6H, P1D, P3D, P7D")
+    forecast.add_argument("--trigger-type", default="scheduled")
+    forecast.add_argument("--supersedes-forecast-run-id", type=uuid.UUID)
     return parser
 
 
@@ -424,6 +437,24 @@ def main() -> None:
             f"support_state={record.support_state} ias_score={record.ias_score} "
             f"observed={record.observed_count} expected={record.expected_count} "
             f"deviance={record.deviance} historical_windows={record.historical_window_count}"
+        )
+        return
+    if args.command == "issue-forecast":
+        with SessionLocal() as session:
+            run = ForecastService(
+                session,
+                specification=load_forecast_specification(settings.forecast_specification_path),
+            ).issue_forecast(
+                spatiotemporal_etas_estimate_id=args.spatiotemporal_etas_estimate_id,
+                gutenberg_richter_estimate_id=args.gutenberg_richter_estimate_id,
+                issued_at=args.issued_at,
+                horizon_id=args.horizon_id,
+                trigger_type=args.trigger_type,
+                supersedes_forecast_run_id=args.supersedes_forecast_run_id,
+            )
+        print(
+            f"forecast_run_id={run.id} cells={run.cell_count} bins={run.magnitude_bin_count} "
+            f"validity_start={run.validity_start} validity_end={run.validity_end}"
         )
         return
     if args.command == "ingest-usgs-feed":

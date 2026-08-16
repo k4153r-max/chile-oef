@@ -49,9 +49,15 @@ Phase 5 slice (IAS):
   homogeneous by deliberate scoping decision, see docs/PROJECT_STATE.md);
 - a seismic anomaly index (IAS, one component: ETAS count residual as a
   historical percentile) -- an activity-anomaly measure, never a forecast
-  probability or hazard statement.
+  probability or hazard statement;
+- a forecast generation layer (docs/forecast-contract.md): immutable,
+  versioned grid-cell x magnitude-bin forecasts from an already-fit
+  spatiotemporal ETAS model and Gutenberg-Richter b-value, over the
+  horizons and magnitude bins already registered in
+  config/forecast-specification.yaml.
 
-ML is deliberately not implemented
+CSEP/pyCSEP evaluation, IAS's remaining components, and ML are deliberately
+not implemented
 yet. The tectonic class uncertainty masses are not calibrated forecast
 probabilities.
 
