@@ -168,3 +168,102 @@ class TectonicClassificationResponse(BaseModel):
     probabilities: dict[str, float]
     diagnostics: dict[str, Any]
     created_at: datetime
+
+
+class MagnitudeTypeCountResponse(BaseModel):
+    magnitude_type: str | None
+    count: int
+
+
+class NotableEventResponse(BaseModel):
+    event_time: datetime
+    magnitude: float
+    magnitude_type: str | None
+    place: str | None
+    latitude: float
+    longitude: float
+
+
+class CatalogSummaryResponse(BaseModel):
+    total_events: int
+    events_with_magnitude: int
+    earliest_event_time: datetime | None
+    latest_event_time: datetime | None
+    magnitude_type_counts: list[MagnitudeTypeCountResponse]
+    top_magnitude_events: list[NotableEventResponse]
+    disclaimer: str = DISCLAIMER_ES
+
+
+class ForecastRunSummaryResponse(BaseModel):
+    id: uuid.UUID
+    issued_at: datetime
+    validity_start: datetime
+    validity_end: datetime
+    horizon_id: str
+    cell_count: int
+    magnitude_bin_count: int
+    reference_magnitude: float
+    b_value_used: float
+    calibration_status: str
+    method_version: str
+
+
+class ForecastRunListResponse(BaseModel):
+    data: list[ForecastRunSummaryResponse]
+    disclaimer: str = DISCLAIMER_ES
+
+
+class ForecastMagnitudeBinResponse(BaseModel):
+    lower: float
+    upper: float | None
+
+
+class ForecastCellResponse(BaseModel):
+    cell_id: str
+    center_latitude: float
+    center_longitude: float
+    magnitude_lower: float
+    magnitude_upper: float | None
+    expected_count: float
+    probability_at_least_one: float = Field(ge=0, le=1)
+
+
+class ForecastRunDetailResponse(BaseModel):
+    id: uuid.UUID
+    issued_at: datetime
+    validity_start: datetime
+    validity_end: datetime
+    horizon_id: str
+    reference_magnitude: float
+    b_value_used: float
+    calibration_status: str
+    method_version: str
+    magnitude_bins: list[ForecastMagnitudeBinResponse]
+    selected_magnitude_lower: float
+    cell_count_total: int
+    cells: list[ForecastCellResponse]
+    disclaimer: str = DISCLAIMER_ES
+
+
+class SeismicityModelSummaryResponse(BaseModel):
+    completeness_estimate_id: uuid.UUID
+    mc_value: float
+    magnitude_type: str
+    completeness_window_start: datetime
+    completeness_window_end: datetime
+    completeness_event_count: int
+    gutenberg_richter_estimate_id: uuid.UUID
+    b_value: float
+    b_value_standard_error: float | None
+    events_at_or_above_mc: int
+    spatiotemporal_etas_estimate_id: uuid.UUID
+    mu_per_day: float
+    k0: float
+    alpha: float
+    c_days: float
+    p_exponent: float
+    d0_km: float
+    gamma: float
+    q_exponent: float
+    converged: bool
+    disclaimer: str = DISCLAIMER_ES

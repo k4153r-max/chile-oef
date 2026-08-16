@@ -1,0 +1,28 @@
+# CHILE-OEF API backend — Render Blueprint (free tier)
+# Blueprint: https://dashboard.render.com/blueprint/new?repo=<this repo's URL>
+#
+# Render's free Postgres plan is deleted after 90 days of inactivity-free
+# life unless upgraded -- see docs/PROJECT_STATE.md "Deploy" section for
+# the tradeoff this implies for a long-lived public showcase.
+databases:
+  - name: chile-oef-db
+    plan: free
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: chile-oef-api
+    runtime: python
+    plan: free
+    branch: master
+    buildCommand: "pip install --upgrade pip && pip install .[dev] && alembic upgrade head"
+    startCommand: "uvicorn chile_oef.app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: CHILE_OEF_ENVIRONMENT
+        value: production
+      - key: CHILE_OEF_DATABASE_URL
+        fromDatabase:
+          name: chile-oef-db
+          property: connectionString
+      - key: CHILE_OEF_LOG_LEVEL
+        value: INFO

@@ -987,6 +987,136 @@ green. Ruff, `ruff format --check`, and `alembic check` all passed.
 Migration `0015` applied cleanly against the real dev database, which now
 also holds the real ingested catalog described above.
 
+### First real-catalog scientific pipeline run, and a genuine bitemporal-availability finding
+
+Added on 2026-08-16, same session, in response to a request to turn this
+work into a live web dashboard -- which needs real fitted parameters and
+a real forecast to show, not just a real catalog. Ran the full chain once
+against the real ingested USGS catalog, all through the existing
+CLI/services, no new code:
+
+- Mc (Entire Magnitude Range, the registered primary estimator): window
+  2005-01-01..2015-01-01 (chosen to bracket the 27F Maule mainshock),
+  magnitude type `mb` (the single largest homogeneous magnitude-type
+  sample in the real catalog, 25,987 of 74,384 rows; `md`, `ml`, and
+  several `mw*` variants each have far fewer rows and were not mixed in,
+  per completeness.md's per-magnitude-type requirement). Result:
+  `mc=4.97`, `event_count=7493`, `support_state=supported`. This Mc is
+  notably higher than a CSN-network local estimate would likely be --
+  expected and explicitly already documented in the ingestion section
+  above: ComCat's own regional completeness for Chile is materially
+  worse than CSN's denser network would give.
+- Gutenberg-Richter (Aki MLE): `b=2.13 (SE 0.098)` over 483 events at/above
+  Mc. Unusually high versus typical regional b~0.7-1.1 -- reported as the
+  real, uncalibrated MLE output over this specific window/magnitude-type
+  slice, not adjusted or investigated further (a real avenue for future
+  scrutiny -- e.g. binned-magnitude MLE correction -- explicitly not
+  attempted here, not hidden).
+- Declustering: 483 events classified, 183 background / 300 triggered.
+- Background rate: estimated over the real, full-scale production grid
+  `chile_regular_0_1_v1` (90,000 cells) for the first time -- previously
+  only exercised on small fixture grids.
+- Spatiotemporal ETAS: converged (6/6 restarts), `mu=0.023/day, k0=0.027,
+  alpha=3.13, c=0.0044d, p=1.048, d0=15.4km, gamma=0.47, q=1.64`.
+- A real forecast was issued (`issue-forecast`, horizon P7D, issued at
+  the actual current time) over the full 90,000-cell grid x 5 magnitude
+  bins -- **450,000 `ForecastCellMagnitudeBin` rows**, the real-scale row
+  volume the forecast-generation-layer section above flagged as "not yet
+  exercised." It completed; row volume at real scale is no longer an
+  open question for the generation step itself (API/serving performance
+  at that scale is still untested, see below).
+
+**A genuine, load-bearing finding, not a bug**: a Phase 6 walk-forward
+evaluation was attempted against this same real catalog and deliberately
+not completed, because the bitemporal invariant this whole project is
+built around correctly refuses to allow it. Every row from this bulk
+backfill has `available_at` set to the actual ingestion moment (today),
+not the historical event date -- the only honest choice, since we did not
+actually have this data at any earlier historical moment
+(docs/backtesting.md: "labeled pseudoprospective unless archival source
+revisions and receipt times can be recovered"; USGS's own per-event
+`updated` timestamp is captured separately as `source_updated_at` and was
+deliberately *not* substituted in as `available_at`, which would have
+been exactly the kind of retroactive availability fabrication this
+architecture exists to prevent). Concretely verified: issuing a forecast
+"now" sees 626 real prior events; the identical call with `issued_at` set
+two days in the past sees **zero** prior events (confirmed directly via
+`prepare_generation_inputs`), because no backfilled row's `available_at`
+is ever earlier than today. A walk-forward fold issued in the past against
+this catalog would therefore score an artificially empty-catalog forecast,
+not a real historical one -- and a fold issued in the future has no
+observed outcome yet to score against. **Genuine prospective Phase 6
+evaluation against this real catalog cannot begin before real time has
+elapsed from today's ingestion moment forward**; this is not a gap to
+close with more code, it is what "prospective" actually requires, and the
+system correctly refuses to fake it.
+
+### First public read-only API + static dashboard, serving the real run above
+
+Added on 2026-08-16, same session, in response to a request to put this
+work in front of real visitors as a web app on etemen.cl (ETEMEN's
+existing site, `forja-web`). Closes the "no public API endpoint for any
+of these eleven models or the forecast layer" gap flagged repeatedly
+above -- but deliberately only the read-only slice a public showcase
+needs, not a general CRUD API.
+
+- New endpoints (`src/chile_oef/app/api/routes.py`,
+  `src/chile_oef/app/api/schemas.py`): `GET /v1/catalog/summary`
+  (aggregate stats + top-magnitude events over the real ingested
+  catalog), `GET /v1/forecasts` and `GET /v1/forecasts/{id}` (cell
+  detail, one magnitude bin at a time -- a real run is 90,000 cells x 5
+  bins = 450,000 rows, far more than a browser should ever fetch at
+  once), and `GET /v1/seismicity/model-summary` (the most recently
+  converged spatiotemporal ETAS fit and the exact Gutenberg-Richter/
+  completeness estimates it cites). All reuse existing models directly;
+  no new persistence.
+- A real bug caught before it shipped: `forecast_run_detail`'s first
+  version defaulted to the *lowest* registered magnitude bin, which is
+  always empty whenever Mc exceeds the bin's lower edge (exactly the
+  case for the real `mb` fit above, Mc=4.97 > bins [3,4) and [4,5)) --
+  forecast-contract.md's own "target threshold below Mc is
+  not_estimable" rule guarantees zero estimable cells there. Fixed to
+  default to the smallest bin at/above the run's own `reference_magnitude`
+  instead; a dedicated integration test
+  (`tests/integration/test_dashboard_api.py`) asserts the default
+  selection is always `>= mc`, specifically so this class of bug cannot
+  regress silently.
+- `uvicorn` was missing from `pyproject.toml` entirely (the README's own
+  "start the API" instructions never actually worked without a global
+  install) -- added as a real dependency. CORS middleware added
+  (`app/main.py`, GET-only, origins configurable via
+  `CHILE_OEF_CORS_ALLOWED_ORIGINS`, defaulting to `etemen.cl` and
+  localhost).
+- `Settings.database_url` now normalizes a bare `postgres://` or
+  `postgresql://` connection string (what Render and Heroku-style managed
+  Postgres actually hand out) to the explicit `postgresql+psycopg://`
+  scheme this app's driver needs -- verified with unit tests
+  (`tests/unit/test_settings.py`), needed before this app can run against
+  any hosted database.
+- Static dashboard added to `forja-web` (ETEMEN's existing site,
+  separate repo) at `/chile-oef/`, in the site's own dark design system
+  (no new framework): live forecast map (canvas, no map-tile dependency),
+  model-parameter card, real catalog stats with the 27F Maule earthquake
+  highlighted, and an explicit section explaining the bitemporal-
+  availability finding above -- framed as a demonstration of rigor, not
+  hidden. Linked from ETEMEN's main nav, footer, and a new
+  "Investigación" section on the homepage, kept visually and textually
+  distinct from the commercial Nexo/indago product cards (CHILE-OEF is
+  not for sale). All API field names used by the dashboard's JS were
+  cross-checked field-by-field against the real running API (no browser
+  available in this environment to visually confirm rendering -- noted
+  as an open verification gap, not silently claimed as done).
+- `render.yaml` added (Render Blueprint, free tier: a Postgres database
+  plus this API as a Python web service, mirroring `forja-web`'s existing
+  deployment pattern) but **not yet deployed** -- creating the actual
+  GitHub repo, Render database, and Render web service are real,
+  externally-visible account actions not taken without the user directly
+  in the loop. See "Exact next work" for what remains.
+
+156 tests passing (153 prior + 3 new settings-normalization unit tests;
+the dashboard API integration test was already included in the 153).
+Ruff, `ruff format --check`, and `alembic check` all clean.
+
 ## Verified static data releases
 
 ### USGS Slab2 South America

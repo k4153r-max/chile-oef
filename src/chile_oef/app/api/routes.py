@@ -8,16 +8,25 @@ from sqlalchemy.orm import Session
 
 from chile_oef import __version__
 from chile_oef.app.api.schemas import (
+    CatalogSummaryResponse,
     CellResponse,
     DatasetVersionResponse,
     EventDetailResponse,
     EventListResponse,
     EventResponse,
     EventRevisionResponse,
+    ForecastCellResponse,
+    ForecastMagnitudeBinResponse,
+    ForecastRunDetailResponse,
+    ForecastRunListResponse,
+    ForecastRunSummaryResponse,
     GridResponse,
     HealthResponse,
+    MagnitudeTypeCountResponse,
+    NotableEventResponse,
     QualityFlagResponse,
     RawArtifactResponse,
+    SeismicityModelSummaryResponse,
     SlabSampleResponse,
     SourceStatusResponse,
     TectonicClassificationResponse,
@@ -25,12 +34,18 @@ from chile_oef.app.api.schemas import (
 )
 from chile_oef.db.models import (
     CatalogSource,
+    CompletenessEstimate,
     DatasetVersion,
+    EventRevision,
     EventTectonicClassification,
+    ForecastCellMagnitudeBin,
+    ForecastRun,
+    GutenbergRichterEstimate,
     IngestionRun,
     RawArtifact,
     SeismicCell,
     SpatialGrid,
+    SpatiotemporalEtasEstimate,
     TectonicRelease,
 )
 from chile_oef.db.repositories.events import get_event_revisions, list_events
@@ -374,3 +389,222 @@ def tectonic_classifications(
         )
         for row in rows
     ]
+
+
+@router.get("/catalog/summary", response_model=CatalogSummaryResponse)
+def catalog_summary(session: SessionDependency) -> CatalogSummaryResponse:
+    """Aggregate stats over every ingested event revision -- not
+    deduplicated across canonical events (a single bulk backfill from one
+    source rarely produces multiple revisions per event), intended as a
+    real-data dashboard summary, not a precise scientific catalog count.
+    """
+    total_events = session.scalar(select(func.count()).select_from(EventRevision)) or 0
+    events_with_magnitude = (
+        session.scalar(
+            select(func.count())
+            .select_from(EventRevision)
+            .where(EventRevision.magnitude.isnot(None))
+        )
+        or 0
+    )
+    earliest_event_time = session.scalar(select(func.min(EventRevision.event_time)))
+    latest_event_time = session.scalar(select(func.max(EventRevision.event_time)))
+    type_counts = session.execute(
+        select(EventRevision.magnitude_type, func.count())
+        .group_by(EventRevision.magnitude_type)
+        .order_by(func.count().desc())
+    ).all()
+    top_rows = session.execute(
+        select(
+            EventRevision.event_time,
+            EventRevision.magnitude,
+            EventRevision.magnitude_type,
+            EventRevision.place,
+            EventRevision.latitude,
+            EventRevision.longitude,
+        )
+        .where(EventRevision.magnitude.isnot(None))
+        .order_by(EventRevision.magnitude.desc())
+        .limit(10)
+    ).all()
+    return CatalogSummaryResponse(
+        total_events=total_events,
+        events_with_magnitude=events_with_magnitude,
+        earliest_event_time=earliest_event_time,
+        latest_event_time=latest_event_time,
+        magnitude_type_counts=[
+            MagnitudeTypeCountResponse(magnitude_type=magnitude_type, count=count)
+            for magnitude_type, count in type_counts
+        ],
+        top_magnitude_events=[
+            NotableEventResponse(
+                event_time=event_time,
+                magnitude=magnitude,
+                magnitude_type=magnitude_type,
+                place=place,
+                latitude=latitude,
+                longitude=longitude,
+            )
+            for event_time, magnitude, magnitude_type, place, latitude, longitude in top_rows
+        ],
+    )
+
+
+@router.get("/forecasts", response_model=ForecastRunListResponse)
+def forecast_runs(
+    session: SessionDependency,
+    limit: int = Query(default=20, ge=1, le=100),
+) -> ForecastRunListResponse:
+    rows = session.scalars(select(ForecastRun).order_by(ForecastRun.issued_at.desc()).limit(limit))
+    return ForecastRunListResponse(
+        data=[
+            ForecastRunSummaryResponse(
+                id=run.id,
+                issued_at=run.issued_at,
+                validity_start=run.validity_start,
+                validity_end=run.validity_end,
+                horizon_id=run.horizon_id,
+                cell_count=run.cell_count,
+                magnitude_bin_count=run.magnitude_bin_count,
+                reference_magnitude=run.reference_magnitude,
+                b_value_used=run.b_value_used,
+                calibration_status=run.calibration_status,
+                method_version=run.method_version,
+            )
+            for run in rows
+        ]
+    )
+
+
+@router.get("/forecasts/{forecast_run_id}", response_model=ForecastRunDetailResponse)
+def forecast_run_detail(
+    forecast_run_id: uuid.UUID,
+    session: SessionDependency,
+    magnitude_lower: float | None = None,
+    limit: int = Query(default=3000, ge=1, le=10_000),
+) -> ForecastRunDetailResponse:
+    """Cell detail for one magnitude bin at a time (a real forecast run
+    over the production grid has 90,000 cells x 5 bins = 450,000 rows,
+    far more than a browser map should ever fetch at once). Defaults to
+    the lowest registered magnitude bin -- the most event-rich, most
+    visually informative one -- and returns only `support_state
+    == "estimable"` cells ranked by expected count, since the overwhelming
+    majority of cells carry only background-level, visually meaningless
+    rates.
+    """
+    run = session.get(ForecastRun, forecast_run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="forecast run not found")
+    bin_rows = session.execute(
+        select(ForecastCellMagnitudeBin.magnitude_lower, ForecastCellMagnitudeBin.magnitude_upper)
+        .where(ForecastCellMagnitudeBin.forecast_run_id == run.id)
+        .distinct()
+        .order_by(ForecastCellMagnitudeBin.magnitude_lower)
+    ).all()
+    if not bin_rows:
+        raise HTTPException(status_code=404, detail="forecast run has no cell/bin rows")
+    available_lowers = [lower for lower, _upper in bin_rows]
+    if magnitude_lower is not None:
+        selected = magnitude_lower
+    else:
+        # Bins whose lower edge sits below the run's reference magnitude
+        # are always not_estimable (forecast-contract.md's "target
+        # threshold below Mc" rule) and would return zero cells -- default
+        # to the smallest bin at/above Mc instead of the smallest bin
+        # overall.
+        estimable_lowers = [lower for lower in available_lowers if lower >= run.reference_magnitude]
+        selected = estimable_lowers[0] if estimable_lowers else available_lowers[0]
+    if selected not in available_lowers:
+        raise HTTPException(
+            status_code=422, detail=f"magnitude_lower must be one of {available_lowers}"
+        )
+
+    cell_statement = (
+        select(ForecastCellMagnitudeBin, SeismicCell.center_latitude, SeismicCell.center_longitude)
+        .join(SeismicCell, SeismicCell.id == ForecastCellMagnitudeBin.cell_id)
+        .where(
+            ForecastCellMagnitudeBin.forecast_run_id == run.id,
+            ForecastCellMagnitudeBin.magnitude_lower == selected,
+            ForecastCellMagnitudeBin.support_state == "estimable",
+        )
+        .order_by(ForecastCellMagnitudeBin.expected_count.desc())
+        .limit(limit)
+    )
+    cells = [
+        ForecastCellResponse(
+            cell_id=bin_row.cell_id,
+            center_latitude=center_latitude,
+            center_longitude=center_longitude,
+            magnitude_lower=bin_row.magnitude_lower,
+            magnitude_upper=bin_row.magnitude_upper,
+            expected_count=bin_row.expected_count,
+            probability_at_least_one=bin_row.probability_at_least_one,
+        )
+        for bin_row, center_latitude, center_longitude in session.execute(cell_statement)
+    ]
+    return ForecastRunDetailResponse(
+        id=run.id,
+        issued_at=run.issued_at,
+        validity_start=run.validity_start,
+        validity_end=run.validity_end,
+        horizon_id=run.horizon_id,
+        reference_magnitude=run.reference_magnitude,
+        b_value_used=run.b_value_used,
+        calibration_status=run.calibration_status,
+        method_version=run.method_version,
+        magnitude_bins=[
+            ForecastMagnitudeBinResponse(lower=lower, upper=upper) for lower, upper in bin_rows
+        ],
+        selected_magnitude_lower=selected,
+        cell_count_total=run.cell_count,
+        cells=cells,
+    )
+
+
+@router.get("/seismicity/model-summary", response_model=SeismicityModelSummaryResponse)
+def seismicity_model_summary(session: SessionDependency) -> SeismicityModelSummaryResponse:
+    """The most recently converged spatiotemporal ETAS fit and the exact
+    Gutenberg-Richter/completeness estimates it cites -- the one "current
+    default model" a dashboard's model card wants, resolved by recency
+    rather than a hardcoded id, since which chain is the presented default
+    can change as new fits are added.
+    """
+    etas = session.scalar(
+        select(SpatiotemporalEtasEstimate)
+        .where(SpatiotemporalEtasEstimate.converged.is_(True))
+        .order_by(SpatiotemporalEtasEstimate.created_at.desc())
+        .limit(1)
+    )
+    if etas is None:
+        raise HTTPException(status_code=404, detail="no converged spatiotemporal ETAS estimate yet")
+    gutenberg_richter = session.scalar(
+        select(GutenbergRichterEstimate)
+        .where(GutenbergRichterEstimate.completeness_estimate_id == etas.completeness_estimate_id)
+        .order_by(GutenbergRichterEstimate.created_at.desc())
+        .limit(1)
+    )
+    completeness = session.get(CompletenessEstimate, etas.completeness_estimate_id)
+    if gutenberg_richter is None or completeness is None:
+        raise HTTPException(status_code=404, detail="ETAS estimate lineage incomplete")
+    return SeismicityModelSummaryResponse(
+        completeness_estimate_id=completeness.id,
+        mc_value=completeness.mc_value,
+        magnitude_type=completeness.magnitude_type,
+        completeness_window_start=completeness.start_time,
+        completeness_window_end=completeness.end_time,
+        completeness_event_count=completeness.event_count,
+        gutenberg_richter_estimate_id=gutenberg_richter.id,
+        b_value=gutenberg_richter.b_value,
+        b_value_standard_error=gutenberg_richter.b_value_standard_error,
+        events_at_or_above_mc=gutenberg_richter.events_at_or_above_mc,
+        spatiotemporal_etas_estimate_id=etas.id,
+        mu_per_day=etas.mu_per_day,
+        k0=etas.k0,
+        alpha=etas.alpha,
+        c_days=etas.c_days,
+        p_exponent=etas.p_exponent,
+        d0_km=etas.d0_km,
+        gamma=etas.gamma,
+        q_exponent=etas.q_exponent,
+        converged=etas.converged,
+    )

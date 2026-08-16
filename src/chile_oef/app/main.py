@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from chile_oef import __version__
 from chile_oef.app.api.routes import router
@@ -12,5 +13,11 @@ app = FastAPI(
         "Experimental probabilistic earthquake-occurrence forecasting research platform. "
         "Not an official alert or deterministic prediction service."
     ),
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_allowed_origins,
+    allow_methods=["GET"],
+    allow_headers=["*"],
 )
 app.include_router(router, prefix=settings.api_prefix)
