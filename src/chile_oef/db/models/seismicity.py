@@ -292,3 +292,54 @@ class TemporalEtasEstimate(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class SpatiotemporalEtasEstimate(Base):
+    """Append-only spatiotemporal ETAS fit. Same provenance discipline as
+    TemporalEtasEstimate (mandatory FK to CompletenessEstimate, optional FK
+    to the seeding ModifiedOmoriSequenceEstimate). The completeness
+    estimate's bounding box defines the analysis region and its area
+    (`region_area_km2`) -- fitting without a bounded region is refused, not
+    approximated with an arbitrary default area.
+    """
+
+    __tablename__ = "spatiotemporal_etas_estimates"
+    __table_args__ = (CheckConstraint("event_count >= 0", name="event_count_non_negative"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    completeness_estimate_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("completeness_estimates.id"), nullable=False
+    )
+    initial_guess_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("modified_omori_sequence_estimates.id")
+    )
+    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    min_latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    max_latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    min_longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    max_longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    region_area_km2: Mapped[float] = mapped_column(Float, nullable=False)
+    magnitude_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    reference_magnitude: Mapped[float] = mapped_column(Float, nullable=False)
+    event_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    support_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    observation_duration_days: Mapped[float] = mapped_column(Float, nullable=False)
+    mu_per_day: Mapped[float | None] = mapped_column(Float)
+    k0: Mapped[float | None] = mapped_column(Float)
+    alpha: Mapped[float | None] = mapped_column(Float)
+    c_days: Mapped[float | None] = mapped_column(Float)
+    p_exponent: Mapped[float | None] = mapped_column(Float)
+    d0_km: Mapped[float | None] = mapped_column(Float)
+    gamma: Mapped[float | None] = mapped_column(Float)
+    q_exponent: Mapped[float | None] = mapped_column(Float)
+    converged: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    restarts_converged: Mapped[int] = mapped_column(Integer, nullable=False)
+    log_likelihood: Mapped[float | None] = mapped_column(Float)
+    method_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    calibration_status: Mapped[str] = mapped_column(String(64), nullable=False)
+    catalog_as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    diagnostics_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )

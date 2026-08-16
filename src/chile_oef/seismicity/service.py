@@ -1,3 +1,4 @@
+import math
 import uuid
 from datetime import datetime
 
@@ -15,6 +16,7 @@ from chile_oef.db.models import (
     SeismicityBackgroundRateRun,
     SeismicityDeclusteringRun,
     SpatialGrid,
+    SpatiotemporalEtasEstimate,
     TemporalEtasEstimate,
 )
 from chile_oef.seismicity.background_rate import (
@@ -42,6 +44,13 @@ from chile_oef.seismicity.declustering import (
 from chile_oef.seismicity.etas import EtasParameters, EtasPolicy, estimate_temporal_etas
 from chile_oef.seismicity.gutenberg_richter import estimate_b_value
 from chile_oef.seismicity.modified_omori import ModifiedOmoriPolicy, estimate_modified_omori
+from chile_oef.seismicity.spatiotemporal_etas import (
+    SpatiotemporalEtasParameters,
+    SpatiotemporalEtasPolicy,
+    estimate_spatiotemporal_etas,
+)
+
+EARTH_RADIUS_KM = 6371.0088
 
 
 class CompletenessEstimationService:
@@ -688,6 +697,168 @@ class TemporalEtasService:
             alpha=parameters.alpha if parameters else None,
             c_days=parameters.c_days if parameters else None,
             p_exponent=parameters.p_exponent if parameters else None,
+            converged=result.converged,
+            restarts_converged=result.restarts_converged,
+            log_likelihood=result.log_likelihood,
+            method_version=result.method_version,
+            calibration_status=result.calibration_status,
+            catalog_as_of=source.catalog_as_of,
+            diagnostics_json=result.diagnostics,
+        )
+        self.session.add(record)
+        self.session.commit()
+        return record
+
+
+def _region_area_km2(
+    min_latitude: float, max_latitude: float, min_longitude: float, max_longitude: float
+) -> float:
+    mid_latitude_radians = math.radians((min_latitude + max_latitude) / 2.0)
+    height_km = (max_latitude - min_latitude) * (math.pi / 180.0) * EARTH_RADIUS_KM
+    width_km = (
+        (max_longitude - min_longitude)
+        * (math.pi / 180.0)
+        * EARTH_RADIUS_KM
+        * math.cos(mid_latitude_radians)
+    )
+    return abs(height_km * width_km)
+
+
+class SpatiotemporalEtasService:
+    def __init__(self, session: Session, *, policy: SpatiotemporalEtasPolicy | None = None) -> None:
+        self.session = session
+        self.policy = policy or SpatiotemporalEtasPolicy()
+
+    def _resolve_initial_guess(
+        self, declustering_run_id: uuid.UUID | None
+    ) -> tuple[SpatiotemporalEtasParameters | None, uuid.UUID | None]:
+        if declustering_run_id is None:
+            return None, None
+        omori_rows = list(
+            self.session.scalars(
+                select(ModifiedOmoriSequenceEstimate).where(
+                    ModifiedOmoriSequenceEstimate.declustering_run_id == declustering_run_id,
+                    ModifiedOmoriSequenceEstimate.support_state == "estimable",
+                )
+            )
+        )
+        if not omori_rows:
+            return None, None
+        total_weight = sum(row.event_count for row in omori_rows)
+        c = sum(row.c_days * row.event_count for row in omori_rows) / total_weight
+        p = sum(row.p_exponent * row.event_count for row in omori_rows) / total_weight
+        seed_row = max(omori_rows, key=lambda row: row.event_count)
+        # k0/mu are not meaningfully transferable from a temporal-only fit
+        # to a spatial-density-valued one (different units, see
+        # spatiotemporal_etas.py); only (c, p) -- the purely temporal shape
+        # -- are reused, with generic defaults for the rest.
+        return (
+            SpatiotemporalEtasParameters(
+                mu_per_day=1.0,
+                k0=1.0,
+                alpha=1.0,
+                c_days=c,
+                p_exponent=p,
+                d0_km=5.0,
+                gamma=0.5,
+                q_exponent=1.5,
+            ),
+            seed_row.id,
+        )
+
+    def estimate_for_completeness_estimate(
+        self,
+        completeness_estimate_id: uuid.UUID,
+        *,
+        declustering_run_id: uuid.UUID | None = None,
+    ) -> SpatiotemporalEtasEstimate:
+        """Fit spatiotemporal ETAS on the catalog at/above a specific
+        completeness estimate's Mc, within its bounding box (required --
+        spatiotemporal ETAS needs a defined region; a completeness estimate
+        without one is refused rather than guessing a default area).
+        """
+        source = self.session.get(CompletenessEstimate, completeness_estimate_id)
+        if source is None:
+            raise ValueError(f"completeness estimate {completeness_estimate_id} not found")
+        if source.mc_value is None:
+            raise ValueError(
+                f"completeness estimate {completeness_estimate_id} has no mc_value "
+                f"(support_state={source.support_state!r}); cannot fit ETAS on it"
+            )
+        if None in (
+            source.min_latitude,
+            source.max_latitude,
+            source.min_longitude,
+            source.max_longitude,
+        ):
+            raise ValueError(
+                f"completeness estimate {completeness_estimate_id} has no bounding box; "
+                "spatiotemporal ETAS requires a defined region"
+            )
+
+        observations = fetch_declustering_catalog(
+            self.session,
+            as_of=source.catalog_as_of,
+            start_time=source.start_time,
+            end_time=source.end_time,
+            magnitude_type=source.magnitude_type,
+            minimum_magnitude=source.mc_value,
+            min_latitude=source.min_latitude,
+            max_latitude=source.max_latitude,
+            min_longitude=source.min_longitude,
+            max_longitude=source.max_longitude,
+        )
+        ordered = sorted(observations, key=lambda observation: observation.event_time)
+        duration_days = (source.end_time - source.start_time).total_seconds() / 86400.0
+        event_times_days = [
+            (observation.event_time - source.start_time).total_seconds() / 86400.0
+            for observation in ordered
+        ]
+        latitudes = [observation.latitude for observation in ordered]
+        longitudes = [observation.longitude for observation in ordered]
+        magnitudes = [observation.magnitude for observation in ordered]
+        region_area_km2 = _region_area_km2(
+            source.min_latitude, source.max_latitude, source.min_longitude, source.max_longitude
+        )
+
+        initial_guess, initial_guess_source_id = self._resolve_initial_guess(declustering_run_id)
+
+        result = estimate_spatiotemporal_etas(
+            event_times_days,
+            latitudes,
+            longitudes,
+            magnitudes,
+            region_area_km2=region_area_km2,
+            reference_magnitude=source.mc_value,
+            observation_duration_days=duration_days,
+            policy=self.policy,
+            initial_guess=initial_guess,
+        )
+
+        parameters = result.parameters
+        record = SpatiotemporalEtasEstimate(
+            completeness_estimate_id=source.id,
+            initial_guess_source_id=initial_guess_source_id,
+            start_time=source.start_time,
+            end_time=source.end_time,
+            min_latitude=source.min_latitude,
+            max_latitude=source.max_latitude,
+            min_longitude=source.min_longitude,
+            max_longitude=source.max_longitude,
+            region_area_km2=region_area_km2,
+            magnitude_type=source.magnitude_type,
+            reference_magnitude=result.reference_magnitude,
+            event_count=result.event_count,
+            support_state=result.support_state,
+            observation_duration_days=result.observation_duration_days,
+            mu_per_day=parameters.mu_per_day if parameters else None,
+            k0=parameters.k0 if parameters else None,
+            alpha=parameters.alpha if parameters else None,
+            c_days=parameters.c_days if parameters else None,
+            p_exponent=parameters.p_exponent if parameters else None,
+            d0_km=parameters.d0_km if parameters else None,
+            gamma=parameters.gamma if parameters else None,
+            q_exponent=parameters.q_exponent if parameters else None,
             converged=result.converged,
             restarts_converged=result.restarts_converged,
             log_likelihood=result.log_likelihood,

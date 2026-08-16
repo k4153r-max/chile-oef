@@ -22,6 +22,7 @@ from chile_oef.db.models.seismicity import (
     SeismicCellBackgroundRate,
     SeismicityBackgroundRateRun,
     SeismicityDeclusteringRun,
+    SpatiotemporalEtasEstimate,
     TemporalEtasEstimate,
 )
 from chile_oef.db.models.tectonics import (
@@ -61,6 +62,7 @@ __all__ = [
     "SourceEndpoint",
     "SourceEvent",
     "SpatialGrid",
+    "SpatiotemporalEtasEstimate",
     "TectonicAsset",
     "TectonicRelease",
     "TemporalEtasEstimate",

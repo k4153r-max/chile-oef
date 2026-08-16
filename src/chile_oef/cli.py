@@ -24,6 +24,7 @@ from chile_oef.seismicity.service import (
     DeclusteringService,
     GutenbergRichterEstimationService,
     ModifiedOmoriService,
+    SpatiotemporalEtasService,
     TemporalEtasService,
 )
 from chile_oef.tectonics.assets import TectonicAssetService
@@ -144,6 +145,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--declustering-run-id",
         type=uuid.UUID,
         help="optional: seed the optimizer from this run's Modified Omori families",
+    )
+
+    st_etas = subparsers.add_parser(
+        "fit-spatiotemporal-etas",
+        help="fit spatiotemporal ETAS above a completeness estimate's Mc (requires a bounding box)",
+    )
+    st_etas.add_argument("--completeness-estimate-id", type=uuid.UUID, required=True)
+    st_etas.add_argument(
+        "--declustering-run-id",
+        type=uuid.UUID,
+        help="optional: seed the optimizer's (c, p) from this run's Modified Omori families",
     )
     return parser
 
@@ -378,6 +390,20 @@ def main() -> None:
             f"converged={record.converged} restarts_converged={record.restarts_converged} "
             f"mu={record.mu_per_day} k0={record.k0} alpha={record.alpha} "
             f"c={record.c_days} p={record.p_exponent}"
+        )
+        return
+    if args.command == "fit-spatiotemporal-etas":
+        with SessionLocal() as session:
+            record = SpatiotemporalEtasService(session).estimate_for_completeness_estimate(
+                args.completeness_estimate_id,
+                declustering_run_id=args.declustering_run_id,
+            )
+        print(
+            f"event_count={record.event_count} support_state={record.support_state} "
+            f"converged={record.converged} restarts_converged={record.restarts_converged} "
+            f"mu={record.mu_per_day} k0={record.k0} alpha={record.alpha} "
+            f"c={record.c_days} p={record.p_exponent} d0={record.d0_km} "
+            f"gamma={record.gamma} q={record.q_exponent}"
         )
         return
     if args.command == "ingest-usgs-feed":

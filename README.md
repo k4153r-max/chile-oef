@@ -41,9 +41,12 @@ completeness slice:
 - Modified Omori-Utsu aftershock sequence fits (Ogata 1983) over each
   triggered family a declustering run identifies;
 - temporal ETAS (Ogata 1988), a joint 5-parameter maximum-likelihood fit
-  over the entire catalog above a declared Mc.
+  over the entire catalog above a declared Mc;
+- spatiotemporal ETAS, adding an Ogata (1998) isotropic power-law spatial
+  triggering kernel (8 parameters total; background rate stays
+  homogeneous by deliberate scoping decision, see docs/PROJECT_STATE.md).
 
-Spatiotemporal ETAS, IAS and ML are deliberately not implemented
+IAS and ML are deliberately not implemented
 yet. The tectonic class uncertainty masses are not calibrated forecast
 probabilities.
 
