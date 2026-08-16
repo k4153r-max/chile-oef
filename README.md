@@ -11,8 +11,10 @@ established statistical baselines.
 ## Current scope
 
 The repository contains the Phase 0 scientific contracts, the Phase 1 catalog
-foundation, the Phase 2 tectonic foundation, and a first Phase 3 magnitude-of-
-completeness slice:
+foundation, the Phase 2 tectonic foundation, the Phase 3 seismicity gate
+(magnitude of completeness, Gutenberg-Richter, declustering, background rate,
+Modified Omori), Phase 4 (temporal and spatiotemporal ETAS), and a first
+Phase 5 slice (IAS):
 
 - immutable raw-source artifacts;
 - bitemporal source event revisions;
@@ -44,9 +46,12 @@ completeness slice:
   over the entire catalog above a declared Mc;
 - spatiotemporal ETAS, adding an Ogata (1998) isotropic power-law spatial
   triggering kernel (8 parameters total; background rate stays
-  homogeneous by deliberate scoping decision, see docs/PROJECT_STATE.md).
+  homogeneous by deliberate scoping decision, see docs/PROJECT_STATE.md);
+- a seismic anomaly index (IAS, one component: ETAS count residual as a
+  historical percentile) -- an activity-anomaly measure, never a forecast
+  probability or hazard statement.
 
-IAS and ML are deliberately not implemented
+ML is deliberately not implemented
 yet. The tectonic class uncertainty masses are not calibrated forecast
 probabilities.
 

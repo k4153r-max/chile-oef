@@ -1,6 +1,6 @@
 import math
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,6 +11,7 @@ from chile_oef.db.models import (
     EventRevision,
     GutenbergRichterEstimate,
     ModifiedOmoriSequenceEstimate,
+    SeismicAnomalyIndexEstimate,
     SeismicCell,
     SeismicCellBackgroundRate,
     SeismicityBackgroundRateRun,
@@ -43,6 +44,7 @@ from chile_oef.seismicity.declustering import (
 )
 from chile_oef.seismicity.etas import EtasParameters, EtasPolicy, estimate_temporal_etas
 from chile_oef.seismicity.gutenberg_richter import estimate_b_value
+from chile_oef.seismicity.ias import IasPolicy, estimate_ias
 from chile_oef.seismicity.modified_omori import ModifiedOmoriPolicy, estimate_modified_omori
 from chile_oef.seismicity.spatiotemporal_etas import (
     SpatiotemporalEtasParameters,
@@ -865,6 +867,106 @@ class SpatiotemporalEtasService:
             method_version=result.method_version,
             calibration_status=result.calibration_status,
             catalog_as_of=source.catalog_as_of,
+            diagnostics_json=result.diagnostics,
+        )
+        self.session.add(record)
+        self.session.commit()
+        return record
+
+
+class IasEstimationService:
+    def __init__(self, session: Session, *, policy: IasPolicy | None = None) -> None:
+        self.session = session
+        self.policy = policy or IasPolicy()
+
+    def estimate_for_temporal_etas_estimate(
+        self, temporal_etas_estimate_id: uuid.UUID, *, evaluation_end_at: datetime
+    ) -> SeismicAnomalyIndexEstimate:
+        """Evaluate IAS as of a specific instant, against a specific
+        already-fit TemporalEtasEstimate's expected-count model. There is
+        no "current" or "latest" default: the caller names the ETAS fit and
+        the evaluation instant explicitly, same as every other service in
+        this module.
+        """
+        etas_source = self.session.get(TemporalEtasEstimate, temporal_etas_estimate_id)
+        if etas_source is None:
+            raise ValueError(f"temporal ETAS estimate {temporal_etas_estimate_id} not found")
+        if etas_source.mu_per_day is None:
+            raise ValueError(
+                f"temporal ETAS estimate {temporal_etas_estimate_id} did not converge "
+                f"(support_state={etas_source.support_state!r}); cannot compute IAS against it"
+            )
+
+        completeness_source = self.session.get(
+            CompletenessEstimate, etas_source.completeness_estimate_id
+        )
+        if completeness_source is None or completeness_source.mc_value is None:
+            raise ValueError(
+                f"temporal ETAS estimate {temporal_etas_estimate_id} references a "
+                "completeness estimate with no mc_value"
+            )
+        if evaluation_end_at <= completeness_source.start_time:
+            raise ValueError(
+                "evaluation_end_at must be after the completeness estimate's start_time"
+            )
+
+        selection = fetch_magnitude_catalog(
+            self.session,
+            as_of=completeness_source.catalog_as_of,
+            start_time=completeness_source.start_time,
+            end_time=completeness_source.end_time,
+            magnitude_type=completeness_source.magnitude_type,
+            min_latitude=completeness_source.min_latitude,
+            max_latitude=completeness_source.max_latitude,
+            min_longitude=completeness_source.min_longitude,
+            max_longitude=completeness_source.max_longitude,
+        )
+        above_mc = [
+            observation
+            for observation in selection.observations
+            if observation.magnitude >= completeness_source.mc_value
+        ]
+        event_times_days = [
+            (observation.event_time - completeness_source.start_time).total_seconds() / 86400.0
+            for observation in above_mc
+        ]
+        magnitudes = [observation.magnitude for observation in above_mc]
+        evaluation_end_days = (
+            evaluation_end_at - completeness_source.start_time
+        ).total_seconds() / 86400.0
+
+        etas_parameters = EtasParameters(
+            mu_per_day=etas_source.mu_per_day,
+            k0=etas_source.k0,
+            alpha=etas_source.alpha,
+            c_days=etas_source.c_days,
+            p_exponent=etas_source.p_exponent,
+        )
+        result = estimate_ias(
+            event_times_days,
+            magnitudes,
+            reference_magnitude=completeness_source.mc_value,
+            etas_parameters=etas_parameters,
+            evaluation_end_days=evaluation_end_days,
+            policy=self.policy,
+        )
+        component = result.components[0]
+
+        record = SeismicAnomalyIndexEstimate(
+            temporal_etas_estimate_id=etas_source.id,
+            evaluation_start_time=completeness_source.start_time
+            + timedelta(days=result.evaluation_start_days),
+            evaluation_end_time=evaluation_end_at,
+            evaluation_window_days=self.policy.evaluation_window_days,
+            observed_count=component.observed_count,
+            expected_count=component.expected_count,
+            deviance=component.deviance,
+            historical_window_count=result.historical_window_count,
+            support_state=result.support_state,
+            ias_score=result.ias_score,
+            method_version=result.method_version,
+            calibration_status=result.calibration_status,
+            catalog_as_of=completeness_source.catalog_as_of,
             diagnostics_json=result.diagnostics,
         )
         self.session.add(record)

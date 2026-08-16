@@ -647,12 +647,75 @@ again as worth addressing (e.g. a `slow`/`network`-style pytest marker to
 separate these from the fast unit tests) before more slices are added, not
 yet done in this session.
 
+### Phase 5 started — seismic anomaly index (IAS) implemented and validated
+
+Added on 2026-08-16, same session. First Phase 5 model
+(docs/scientific-methodology.md item 6: "IAS as a non-probabilistic
+activity-anomaly percentile"). Explicitly scoped to one component (of the
+several docs/ias.md lists as candidates), not all of them at once, same
+discipline as every prior slice this session.
+
+- `src/chile_oef/seismicity/ias.py::estimate_ias`: `IAS = 100 * F(D)`
+  (docs/ias.md), where `D` is a one-sided Poisson deviance comparing the
+  observed event count in a recent evaluation window against the count an
+  already-fit temporal ETAS model expects there, and `F` is `D`'s empirical
+  percentile against a historical reference distribution built from earlier
+  non-overlapping windows of the same length in the same catalog. "One-sided"
+  means a quiet window (observed <= expected) scores deviance 0, not a
+  symmetric anomaly -- IAS measures excess activity only, per docs/ias.md.
+  The expected count for any window uses only events strictly before that
+  window's start (same availability invariant, `forecast_time < event_time`,
+  as everywhere else in this project) -- an event cannot contribute to the
+  expectation of the same window it occurs in.
+- **Scope explicitly limited to one component**: docs/ias.md lists ETAS
+  count residuals, energy-proxy residuals, spatial concentration,
+  persistence, and depth migration as candidate inputs, warning that
+  "correlated components must not be double counted." Only the ETAS count
+  residual is implemented; the others are named in the result's diagnostics
+  as `components_not_yet_implemented`, not silently absent. Also explicitly
+  not yet "network-epoch-aware" (docs/ias.md's stated design target): the
+  historical reference distribution does not yet adjust for detection-
+  capability changes across network epochs -- recorded as
+  `network_epoch_aware: false` in diagnostics, a documented simplification.
+- Verified with an injected-burst test: a synthetic catalog matching the
+  fitted ETAS model closely for its whole history, then a 30-event burst
+  added right at the evaluation window that the model does not expect.
+  The burst scores `IAS >= 95` (effectively the most anomalous of ~48
+  historical windows), while an ordinary window evaluated earlier in the
+  *same* catalog (no injected burst) scores a typical, much lower
+  percentile (~21 in the manual check that motivated the test) -- both
+  computed through the identical historical-reference-distribution logic,
+  isolating the burst's effect rather than differing setups.
+- `db/models/seismicity.py::SeismicAnomalyIndexEstimate` (append-only,
+  mandatory FK to the specific `TemporalEtasEstimate` whose fitted
+  parameters defined the expected-count model) + Alembic migration `0012`.
+  `IasEstimationService.estimate_for_temporal_etas_estimate` takes the ETAS
+  estimate id and an explicit `evaluation_end_at` instant -- no "current"
+  or "latest" default, matching every other service in this project.
+  Refuses (raises `ValueError`) a `TemporalEtasEstimate` that did not
+  converge, rather than computing IAS against undefined parameters. CLI:
+  `chile-oef estimate-ias --temporal-etas-estimate-id <uuid> --evaluation-end-at <iso8601>`.
+- Per docs/communication-policy.md, calibration_status is hard-fixed to
+  `"uncalibrated_anomaly_index"` (not derived from any internal confidence
+  metric) and nothing in this module's naming, diagnostics, or docstrings
+  frames IAS as risk, hazard, or "an earthquake is coming" -- it is
+  presented strictly as an observed-vs-expected-rate percentile.
+
+Final gate on 2026-08-16: **108 tests passed** (102 prior + 6 new), Ruff,
+`ruff format --check`, and `alembic check` all passed. Migration `0012`
+applied cleanly against the real dev database. Unlike the ETAS family, IAS
+itself is cheap to compute (no optimizer, pure arithmetic over precomputed
+ETAS parameters), so this addition did not meaningfully increase suite
+runtime.
+
 Still not done for seismicity: no forecast, no public API endpoint for any
-of these eight models. Per docs/scientific-methodology.md's progression,
-IAS (Phase 5) is next, followed by CSEP/pyCSEP evaluation and walk-forward
-replay (Phase 6) -- which, per this file's own "Definition of done," cannot
-be honestly claimed as validated without genuine prospective/backtest
-evaluation, not just unit tests.
+of these ten models. Per docs/scientific-methodology.md's progression,
+CSEP/pyCSEP evaluation and walk-forward replay (Phase 6) is next -- which,
+per this file's own "Definition of done," cannot be honestly claimed as
+validated without genuine prospective/backtest evaluation, not just unit
+tests. The remaining IAS components (energy-proxy residual, spatial
+concentration, persistence, depth migration) and network-epoch awareness
+remain explicit future work, not silently implemented elsewhere.
 
 ## Verified static data releases
 
@@ -720,13 +783,18 @@ The following should be done next, in this order:
    Phase 4 sections above). The scoping decision this item used to flag as
    open (space added to the same joint MLE, homogeneous background) is now
    resolved and documented, along with a real units bug caught and fixed
-   during validation. Next per docs/scientific-methodology.md's
-   progression: IAS (Phase 5), then CSEP/pyCSEP evaluation and walk-forward
-   replay (Phase 6) -- forecasts cannot be honestly claimed as validated
-   before that gate. Spatially-varying background jointly fit with the
-   ETAS triggering kernel (deferred by this session's spatiotemporal ETAS
-   scoping decision) remains open future work, not scheduled next by
-   default.
+   during validation. Spatially-varying background jointly fit with the
+   ETAS triggering kernel (deferred by that scoping decision) remains open
+   future work, not scheduled next by default.
+8. ~~IAS (one component: ETAS count residual)~~ — done 2026-08-16 (see
+   Phase 5 started section above). Remaining IAS components from
+   docs/ias.md (energy-proxy residual, spatial concentration, persistence,
+   depth migration) and network-epoch awareness are explicit future work,
+   not next by default. Next per docs/scientific-methodology.md's
+   progression: CSEP/pyCSEP evaluation and walk-forward replay (Phase 6) --
+   forecasts cannot be honestly claimed as validated before that gate, and
+   per this file's "Definition of done," genuine prospective/backtest
+   evaluation is required, not just unit tests.
 
 ## Known technical risks and decisions still to verify
 

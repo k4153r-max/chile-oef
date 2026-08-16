@@ -343,3 +343,37 @@ class SpatiotemporalEtasEstimate(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class SeismicAnomalyIndexEstimate(Base):
+    """Append-only IAS evaluation. Mandatory FK to the specific
+    TemporalEtasEstimate whose fitted (mu, k0, alpha, c, p) defined the
+    expected-count model IAS measures deviance against -- same provenance
+    discipline as every other estimator in this project. IAS is an anomaly
+    index (docs/ias.md), never a forecast probability or hazard statement;
+    calibration_status is fixed at "uncalibrated_anomaly_index" for that
+    reason, not derived from the estimator's own confidence.
+    """
+
+    __tablename__ = "seismic_anomaly_index_estimates"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    temporal_etas_estimate_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("temporal_etas_estimates.id"), nullable=False
+    )
+    evaluation_start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    evaluation_end_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    evaluation_window_days: Mapped[float] = mapped_column(Float, nullable=False)
+    observed_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    expected_count: Mapped[float] = mapped_column(Float, nullable=False)
+    deviance: Mapped[float] = mapped_column(Float, nullable=False)
+    historical_window_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    support_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    ias_score: Mapped[float | None] = mapped_column(Float)
+    method_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    calibration_status: Mapped[str] = mapped_column(String(64), nullable=False)
+    catalog_as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    diagnostics_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )

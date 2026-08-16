@@ -23,6 +23,7 @@ from chile_oef.seismicity.service import (
     CompletenessEstimationService,
     DeclusteringService,
     GutenbergRichterEstimationService,
+    IasEstimationService,
     ModifiedOmoriService,
     SpatiotemporalEtasService,
     TemporalEtasService,
@@ -157,6 +158,13 @@ def build_parser() -> argparse.ArgumentParser:
         type=uuid.UUID,
         help="optional: seed the optimizer's (c, p) from this run's Modified Omori families",
     )
+
+    ias = subparsers.add_parser(
+        "estimate-ias",
+        help="evaluate the seismic anomaly index (IAS) against a specific temporal ETAS fit",
+    )
+    ias.add_argument("--temporal-etas-estimate-id", type=uuid.UUID, required=True)
+    ias.add_argument("--evaluation-end-at", type=_aware_datetime, required=True)
     return parser
 
 
@@ -404,6 +412,18 @@ def main() -> None:
             f"mu={record.mu_per_day} k0={record.k0} alpha={record.alpha} "
             f"c={record.c_days} p={record.p_exponent} d0={record.d0_km} "
             f"gamma={record.gamma} q={record.q_exponent}"
+        )
+        return
+    if args.command == "estimate-ias":
+        with SessionLocal() as session:
+            record = IasEstimationService(session).estimate_for_temporal_etas_estimate(
+                args.temporal_etas_estimate_id,
+                evaluation_end_at=args.evaluation_end_at,
+            )
+        print(
+            f"support_state={record.support_state} ias_score={record.ias_score} "
+            f"observed={record.observed_count} expected={record.expected_count} "
+            f"deviance={record.deviance} historical_windows={record.historical_window_count}"
         )
         return
     if args.command == "ingest-usgs-feed":
