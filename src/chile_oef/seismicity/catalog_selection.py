@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -100,4 +101,72 @@ def fetch_magnitude_catalog(
         max_latitude=max_latitude,
         min_longitude=min_longitude,
         max_longitude=max_longitude,
+    )
+
+
+@dataclass(frozen=True)
+class SpatialEventObservation:
+    # References EventRevision.id (not the canonical/deduplicated event id),
+    # matching the convention EventTectonicClassification already uses for
+    # per-event persistence.
+    event_revision_id: uuid.UUID
+    event_time: datetime
+    latitude: float
+    longitude: float
+    magnitude: float
+    magnitude_type: str
+
+
+def fetch_declustering_catalog(
+    session: Session,
+    *,
+    as_of: datetime,
+    start_time: datetime,
+    end_time: datetime,
+    magnitude_type: str,
+    minimum_magnitude: float,
+    min_latitude: float | None = None,
+    max_latitude: float | None = None,
+    min_longitude: float | None = None,
+    max_longitude: float | None = None,
+    limit: int = 200_000,
+) -> tuple[SpatialEventObservation, ...]:
+    """Select an availability-safe, located sample for declustering.
+
+    Declustering needs coordinates (not just magnitude), a single magnitude
+    type for the same reason Mc/Gutenberg-Richter do, and a minimum
+    magnitude -- below the declared Mc the catalog is not complete enough
+    for the nearest-neighbor space-time-magnitude metric to be meaningful.
+    """
+    if start_time.tzinfo is None or end_time.tzinfo is None or as_of.tzinfo is None:
+        raise ValueError("start_time, end_time and as_of must be timezone-aware")
+    if start_time >= end_time:
+        raise ValueError("start_time must be before end_time")
+
+    projections = list_events(
+        session,
+        as_of=as_of,
+        start_time=start_time,
+        end_time=end_time,
+        min_magnitude=minimum_magnitude,
+        min_latitude=min_latitude,
+        max_latitude=max_latitude,
+        min_longitude=min_longitude,
+        max_longitude=max_longitude,
+        limit=limit,
+    )
+    return tuple(
+        SpatialEventObservation(
+            event_revision_id=projection.revision_id,
+            event_time=projection.event_time,
+            latitude=projection.latitude,
+            longitude=projection.longitude,
+            magnitude=projection.magnitude,
+            magnitude_type=projection.magnitude_type,
+        )
+        for projection in projections
+        if projection.magnitude is not None
+        and projection.magnitude_type == magnitude_type
+        and projection.latitude is not None
+        and projection.longitude is not None
     )

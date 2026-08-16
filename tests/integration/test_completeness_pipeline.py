@@ -50,6 +50,8 @@ def _event(
     available_at: datetime,
     magnitude: float,
     magnitude_type: str = "ml",
+    latitude: float = -33.0,
+    longitude: float = -71.5,
 ) -> NormalizedEvent:
     return NormalizedEvent(
         source_id="usgs_comcat",
@@ -57,8 +59,8 @@ def _event(
         event_time=event_time,
         received_at=available_at,
         available_at=available_at,
-        latitude=-33.0,
-        longitude=-71.5,
+        latitude=latitude,
+        longitude=longitude,
         depth_km=20.0,
         depth_uncertainty_km=5.0,
         magnitude=magnitude,

@@ -31,9 +31,13 @@ completeness slice:
   Magnitude Range with bootstrap uncertainty (the registered primary
   estimator, Ogata & Katsura 1993);
 - Gutenberg-Richter b-value (Aki 1965 MLE with Shi & Bolt 1982 uncertainty),
-  always citing the specific completeness estimate whose Mc it used.
+  always citing the specific completeness estimate whose Mc it used;
+- nearest-neighbor declustering (Baiesi & Paczuski 2004; Zaliapin &
+  Ben-Zion 2013), separating background from triggered events using the
+  Gutenberg-Richter estimate it cites.
 
-Omori, ETAS, IAS and ML are deliberately not implemented
+Smoothed background rate, Omori, ETAS, IAS and ML are deliberately not
+implemented
 yet. The tectonic class uncertainty masses are not calibrated forecast
 probabilities.
 

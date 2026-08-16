@@ -2,7 +2,17 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Uuid
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Uuid,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -85,6 +95,71 @@ class GutenbergRichterEstimate(Base):
     a_value: Mapped[float | None] = mapped_column(Float)
     catalog_as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     diagnostics_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class SeismicityDeclusteringRun(Base):
+    """Append-only declustering run. Always cites the specific
+    GutenbergRichterEstimate row whose b_value and Mc it used -- same
+    provenance discipline as GutenbergRichterEstimate citing
+    CompletenessEstimate.
+    """
+
+    __tablename__ = "seismicity_declustering_runs"
+    __table_args__ = (CheckConstraint("event_count >= 0", name="event_count_non_negative"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    gutenberg_richter_estimate_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("gutenberg_richter_estimates.id"), nullable=False
+    )
+    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    min_latitude: Mapped[float | None] = mapped_column(Float)
+    max_latitude: Mapped[float | None] = mapped_column(Float)
+    min_longitude: Mapped[float | None] = mapped_column(Float)
+    max_longitude: Mapped[float | None] = mapped_column(Float)
+    magnitude_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    minimum_magnitude: Mapped[float] = mapped_column(Float, nullable=False)
+    b_value_used: Mapped[float] = mapped_column(Float, nullable=False)
+    fractal_dimension: Mapped[float] = mapped_column(Float, nullable=False)
+    method_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    calibration_status: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    classified_event_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    background_event_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    log_eta_threshold: Mapped[float | None] = mapped_column(Float)
+    catalog_as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    diagnostics_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class EventDeclusteringClassification(Base):
+    """Append-only, one row per event per declustering run."""
+
+    __tablename__ = "event_declustering_classifications"
+    __table_args__ = (
+        Index(
+            "ix_event_declustering_classifications_run",
+            "declustering_run_id",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    declustering_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("seismicity_declustering_runs.id"), nullable=False
+    )
+    event_revision_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("event_revisions.id"), nullable=False
+    )
+    parent_event_revision_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("event_revisions.id")
+    )
+    log10_eta: Mapped[float | None] = mapped_column(Float)
+    is_background: Mapped[bool | None] = mapped_column(Boolean)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )

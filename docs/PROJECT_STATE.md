@@ -341,10 +341,70 @@ Final gate on 2026-08-16 (Phase 3 total, all three Mc estimators + GR):
 **71 tests passed** (65 prior + 6 new), Ruff, `ruff format --check`, and
 `alembic check` all passed.
 
+### Phase 3 continued — nearest-neighbor declustering implemented and validated
+
+Added on 2026-08-16, same session. First model of this project that chains
+three prior results together end to end: it takes a
+`gutenberg_richter_estimate_id` and derives its Mc, b-value, window,
+magnitude type, and spatial filters from that row (which itself derives its
+window/Mc from a `completeness_estimate_id`), rather than accepting any of
+those as independent arguments.
+
+- `src/chile_oef/seismicity/declustering.py::decluster`: nearest-neighbor
+  method (Baiesi & Paczuski 2004; Zaliapin & Ben-Zion 2013). For each event,
+  ordered by time, computes eta = t_ij * r_ij^df * 10^(-b*m_i) against every
+  earlier event (haversine distance, vectorized per event with numpy) and
+  keeps the minimum as that event's nearest-neighbor distance and inferred
+  parent. `log10(eta)` is bimodal (triggered vs. background pairs); the
+  threshold separating them is fit with a from-scratch univariate
+  two-component Gaussian-mixture EM (no new dependency: pure numpy +
+  `scipy.optimize.brentq` for the crossover point, not scikit-learn, which
+  stays deferred to Phase 7 as originally planned). The fractal dimension
+  (`df=1.6`, the literature default for southern California) is a declared,
+  uncalibrated default -- no Chile-specific value has been fit.
+  Below the minimum-sample threshold, or if the EM/threshold cannot be fit,
+  events are left explicitly unclassified (`is_background=None`), not
+  defaulted either way. The very first event chronologically in a window is
+  trivially background (no earlier event to be triggered by, within that
+  window).
+- `db/models/seismicity.py::SeismicityDeclusteringRun` (append-only,
+  mandatory FK to the `GutenbergRichterEstimate` it used) and
+  `EventDeclusteringClassification` (one append-only row per event per run,
+  FK to `EventRevision`, nullable FK to its inferred parent
+  `EventRevision`) + Alembic migration `0007`.
+- `catalog_selection.py::fetch_declustering_catalog`: like
+  `fetch_magnitude_catalog` but also returns coordinates and filters to a
+  minimum magnitude (the declared Mc) -- below Mc the catalog is not
+  complete enough for the space-time-magnitude metric to be meaningful.
+- `DeclusteringService.decluster_for_gutenberg_richter_estimate` and
+  `chile-oef decluster --gutenberg-richter-estimate-id <uuid>`.
+- Verified on a synthetic catalog with known background events (uniform in
+  space/time) and known aftershock sequences (tightly clustered near
+  mainshocks): recovered 296/300 background events and 200/200 triggered
+  events correctly in one seeded draw; committed unit tests use looser
+  bounds (>85%/>90%) across the population, not that single draw's exact
+  numbers. A second, real-ingestion-backed integration test (through
+  Postgres, not just the pure function) recovers similar separation on
+  ingested/queried data.
+- Known correctness edge cases handled: same-timestamp and same-location
+  event pairs (floored at 1 second / 1 meter to avoid `log(0)`); empty
+  catalogs; catalogs below the minimum sample size for the threshold fit.
+- Known limitation, not yet addressed: nearest-neighbor computation is
+  O(n^2) per window (vectorized with numpy, not a spatial index) -- fine at
+  the current catalog scale, a documented later optimization at larger
+  scale, same pattern as the Slab2 loader's known memory-scaling note.
+
+Final gate on 2026-08-16 (Phase 3 total, four estimators + declustering):
+**78 tests passed** (72 prior + 6 new), Ruff, `ruff format --check`, and
+`alembic check` all passed. Migration `0007` applied cleanly against the
+real dev database with `alembic check` reporting no drift.
+
 Still not done for seismicity: no forecast, no public API endpoint for any
-of these four models (three Mc estimators + GR) -- everything so far is
-CLI/service-only. Declustered/smoothed background rate and Modified Omori
-(next in docs/scientific-methodology.md's progression) are not implemented.
+of these five models (three Mc estimators + GR + declustering) --
+everything so far is CLI/service-only. Smoothed adaptive-kernel background
+rate estimation over the background subset this declustering step produces,
+and Modified Omori for the triggered subset, are the next two pieces before
+ETAS (docs/scientific-methodology.md's progression).
 
 ## Verified static data releases
 
@@ -400,15 +460,23 @@ The following should be done next, in this order:
    2026-08-16, resolved as re-estimate independently above a declared Mc
    (see Phase 3 continued section above), not reuse of EMR's internal
    byproduct.
-5. Add fixed historical fixtures and walk-forward tests that demonstrate no event
-   with `available_at > catalog_as_of` enters a feature or fit — the pattern in
-   `tests/integration/test_completeness_pipeline.py::test_availability_invariant_excludes_late_arriving_revision`
-   can be extended rather than rebuilt. Not done yet for Gutenberg-Richter
-   specifically (only for the completeness estimators).
-6. Only after Mc/GR gates pass, proceed to declustered/smoothed background and
-   Modified Omori. Temporal ETAS follows those baselines. The Mc/GR gate is
-   now functionally in place (all four models exist and are tested); this is
-   the next real step for this repository.
+5. ~~Add fixed historical fixtures and walk-forward tests~~ — done for
+   Gutenberg-Richter 2026-08-16
+   (`test_gutenberg_richter_excludes_late_arriving_revision_above_mc`). Not
+   yet extended to declustering specifically; the declustering integration
+   test verifies correctness on a real-ingested catalog but does not yet
+   have a dedicated late-arriving-revision walk-forward case.
+6. ~~Declustered background~~ — nearest-neighbor declustering done
+   2026-08-16 (see Phase 3 continued section above). Remaining: (a)
+   smoothed adaptive-kernel background rate estimation over the resulting
+   background subset (Helmstetter, Kagan & Jackson 2007 -- for each grid
+   cell, sum Gaussian kernels centered on background events with
+   per-event adaptive bandwidth from k-nearest-neighbor spacing; the
+   existing `spatial_grids`/`seismic_cells` tables from Phase 2 are the
+   natural place to evaluate this), and (b) Modified Omori-Utsu sequence
+   fits over the triggered subset (grouped by inferred parent, per the
+   `parent_event_revision_id` linkage `EventDeclusteringClassification`
+   already records). Temporal ETAS follows those two baselines.
 
 ## Known technical risks and decisions still to verify
 

@@ -20,6 +20,7 @@ from chile_oef.ingestion.sources.usgs_geojson import UsgsGeoJsonAdapter
 from chile_oef.seismicity.completeness import load_completeness_policy
 from chile_oef.seismicity.service import (
     CompletenessEstimationService,
+    DeclusteringService,
     GutenbergRichterEstimationService,
 )
 from chile_oef.tectonics.assets import TectonicAssetService
@@ -111,6 +112,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="fit the Gutenberg-Richter b-value above a specific completeness estimate's Mc",
     )
     gutenberg_richter.add_argument("--completeness-estimate-id", type=uuid.UUID, required=True)
+
+    decluster_parser = subparsers.add_parser(
+        "decluster",
+        help="nearest-neighbor decluster the catalog above a Gutenberg-Richter estimate's Mc",
+    )
+    decluster_parser.add_argument("--gutenberg-richter-estimate-id", type=uuid.UUID, required=True)
     return parser
 
 
@@ -301,6 +308,17 @@ def main() -> None:
             f"mc_used={record.mc_used} events_at_or_above_mc={record.events_at_or_above_mc} "
             f"support_state={record.support_state} b_value={record.b_value} "
             f"b_value_standard_error={record.b_value_standard_error} a_value={record.a_value}"
+        )
+        return
+    if args.command == "decluster":
+        with SessionLocal() as session:
+            run = DeclusteringService(session).decluster_for_gutenberg_richter_estimate(
+                args.gutenberg_richter_estimate_id
+            )
+        print(
+            f"event_count={run.event_count} classified={run.classified_event_count} "
+            f"background={run.background_event_count} "
+            f"log_eta_threshold={run.log_eta_threshold}"
         )
         return
     if args.command == "ingest-usgs-feed":
