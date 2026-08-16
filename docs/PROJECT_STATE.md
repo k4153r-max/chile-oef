@@ -300,10 +300,51 @@ all passed. CLI smoke-tested against the real dev database with
 `--method entire_magnitude_range`; the resulting empty-catalog row was
 deleted afterward since it carried no real events.
 
-Still not consuming any of these three estimators: Gutenberg-Richter b-value
-model (item 4 of Exact next work), forecasts, and the public API -- none
-exist yet for seismicity. `CompletenessEstimate` rows exist only via direct
-CLI/service calls so far.
+### Phase 3 continued — Gutenberg-Richter b-value implemented and validated
+
+Added on 2026-08-16, same session. Resolves the design question this file
+previously left open (whether to reuse EMR's internal b-value byproduct or
+re-estimate independently): re-estimates independently.
+
+- `src/chile_oef/seismicity/gutenberg_richter.py::estimate_b_value`: classical
+  Aki (1965) maximum-likelihood b, restricted to events at or above a
+  *declared* Mc that the caller must supply -- this function does not derive
+  Mc itself. Deliberately does not reuse the `b_value` Entire Magnitude
+  Range fits internally, because that value is a byproduct of a different
+  joint MLE (over the full magnitude range including the sub-threshold
+  detection rolloff, fit to find Mc), not the classical supra-threshold
+  estimator docs/scientific-methodology.md lists as its own distinct
+  progression step. Uncertainty uses the Shi & Bolt (1982) standard error
+  (uses observed sample variance rather than assuming a perfect exponential
+  the way Aki's original `b/sqrt(N)` does).
+- `src/chile_oef/db/models/seismicity.py::GutenbergRichterEstimate` + Alembic
+  migration `0006`: append-only, with a **mandatory foreign key** to the
+  specific `CompletenessEstimate` row whose `mc_value` was used --
+  implementing docs/completeness.md's "Every downstream statistic stores the
+  Mc result it used" literally, not just as a copied float.
+- `GutenbergRichterEstimationService.estimate_for_completeness_estimate`
+  takes only a `completeness_estimate_id`; it derives the time window,
+  magnitude type, and spatial filters from that row rather than accepting
+  them as separate arguments, and raises `ValueError` if the row has no
+  `mc_value` (e.g. its own support_state was `not_estimable`). This makes it
+  structurally impossible to fit a b-value against a Mc from a mismatched
+  window or region, rather than relying on a runtime consistency check.
+- CLI: `chile-oef estimate-gutenberg-richter --completeness-estimate-id <uuid>`.
+- Verified against an exact synthetic Gutenberg-Richter catalog (no RNG):
+  1000 events at true `b=1.0` recovered `b=0.9965`, with the fitted a-value
+  reproducing the observed count at Mc to within 1e-6 relative error by
+  construction of the MLE anchoring. Also verified b=0.8 and b=1.3 synthetic
+  catalogs are correctly ordered and each recovered within 0.02 of their
+  true value.
+
+Final gate on 2026-08-16 (Phase 3 total, all three Mc estimators + GR):
+**71 tests passed** (65 prior + 6 new), Ruff, `ruff format --check`, and
+`alembic check` all passed.
+
+Still not done for seismicity: no forecast, no public API endpoint for any
+of these four models (three Mc estimators + GR) -- everything so far is
+CLI/service-only. Declustered/smoothed background rate and Modified Omori
+(next in docs/scientific-methodology.md's progression) are not implemented.
 
 ## Verified static data releases
 
@@ -355,22 +396,19 @@ The following should be done next, in this order:
    exist: Maximum Curvature and Goodness-of-Fit (`role=diagnostic`), Entire
    Magnitude Range (`role=primary`, the one actually registered as primary).
    `numpy`/`scipy` are now real dependencies.
-4. Implement Gutenberg–Richter b-value MLE with uncertainty, using the Mc
-   from Entire Magnitude Range (the primary estimator, not Maximum Curvature
-   or Goodness-of-Fit) as the declared completeness threshold; refuse
-   under-supported cells rather than returning unstable values. Note EMR's
-   own point-fit already estimates a `b_value` as a byproduct of its MLE
-   (see `completeness.py`) -- decide explicitly whether Gutenberg-Richter
-   reuses that fit or re-estimates `b` independently above the declared Mc
-   with its own uncertainty method (Aki 1965 MLE with the standard
-   `b/sqrt(N)` or bootstrap standard error); do not silently duplicate one as
-   the other without recording which was used.
+4. ~~Implement Gutenberg–Richter b-value MLE with uncertainty~~ — done
+   2026-08-16, resolved as re-estimate independently above a declared Mc
+   (see Phase 3 continued section above), not reuse of EMR's internal
+   byproduct.
 5. Add fixed historical fixtures and walk-forward tests that demonstrate no event
    with `available_at > catalog_as_of` enters a feature or fit — the pattern in
    `tests/integration/test_completeness_pipeline.py::test_availability_invariant_excludes_late_arriving_revision`
-   can be extended rather than rebuilt.
+   can be extended rather than rebuilt. Not done yet for Gutenberg-Richter
+   specifically (only for the completeness estimators).
 6. Only after Mc/GR gates pass, proceed to declustered/smoothed background and
-   Modified Omori. Temporal ETAS follows those baselines.
+   Modified Omori. Temporal ETAS follows those baselines. The Mc/GR gate is
+   now functionally in place (all four models exist and are tested); this is
+   the next real step for this repository.
 
 ## Known technical risks and decisions still to verify
 

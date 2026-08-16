@@ -22,5 +22,7 @@ emr_sigma_min_magnitude: 0.01
 emr_sigma_max_magnitude: 2.0
 emr_beta_min: 0.01
 emr_beta_max: 10.0
+gutenberg_richter_method_version: gutenberg_richter_aki_mle_v1
+gutenberg_richter_calibration_status: uncalibrated_mle_estimator
 restrictions:
   may_publish_as_calibrated_completeness: false

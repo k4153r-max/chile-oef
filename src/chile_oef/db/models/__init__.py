@@ -14,7 +14,7 @@ from chile_oef.db.models.catalog import (
     SourceEndpoint,
     SourceEvent,
 )
-from chile_oef.db.models.seismicity import CompletenessEstimate
+from chile_oef.db.models.seismicity import CompletenessEstimate, GutenbergRichterEstimate
 from chile_oef.db.models.tectonics import (
     EventTectonicClassification,
     FaultTrace,
@@ -38,6 +38,7 @@ __all__ = [
     "EventRevision",
     "EventTectonicClassification",
     "FaultTrace",
+    "GutenbergRichterEstimate",
     "IngestionArtifact",
     "IngestionRun",
     "RawArtifact",

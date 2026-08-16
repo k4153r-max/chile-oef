@@ -29,9 +29,11 @@ completeness slice:
   completeness estimators with configured estimability bands: Maximum
   Curvature and Goodness-of-Fit (diagnostic cross-checks) and Entire
   Magnitude Range with bootstrap uncertainty (the registered primary
-  estimator, Ogata & Katsura 1993).
+  estimator, Ogata & Katsura 1993);
+- Gutenberg-Richter b-value (Aki 1965 MLE with Shi & Bolt 1982 uncertainty),
+  always citing the specific completeness estimate whose Mc it used.
 
-Gutenberg–Richter, Omori, ETAS, IAS and ML are deliberately not implemented
+Omori, ETAS, IAS and ML are deliberately not implemented
 yet. The tectonic class uncertainty masses are not calibrated forecast
 probabilities.
 

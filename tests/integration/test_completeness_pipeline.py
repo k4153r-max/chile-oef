@@ -15,7 +15,10 @@ from chile_oef.ingestion.registry import load_source_registry
 from chile_oef.ingestion.service import IngestionService, sync_source_registry
 from chile_oef.seismicity.catalog_selection import fetch_magnitude_catalog
 from chile_oef.seismicity.completeness import CompletenessPolicy
-from chile_oef.seismicity.service import CompletenessEstimationService
+from chile_oef.seismicity.service import (
+    CompletenessEstimationService,
+    GutenbergRichterEstimationService,
+)
 
 
 @dataclass
@@ -303,3 +306,94 @@ async def test_entire_magnitude_range_estimate_persists_through_the_service(
         assert record.mc_value == pytest.approx(true_mu, abs=0.2)
         assert record.diagnostics_json["bootstrap_resamples_converged"] > 0
         assert record.id is not None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_gutenberg_richter_chains_onto_a_specific_completeness_estimate(
+    postgis_engine: Engine,
+    tmp_path: Path,
+) -> None:
+    """End-to-end: ingest -> fit Mc with Entire Magnitude Range -> fit b
+    above that specific Mc row's threshold, and confirm the b-value estimate
+    records the exact completeness_estimate_id it depended on.
+    """
+    window_start = datetime(2026, 1, 1, tzinfo=UTC)
+    as_of = window_start + timedelta(days=400)
+    window_end = as_of
+    true_mu = 3.0
+
+    magnitudes = _normal_rolloff_magnitudes(seed=11, sample_size=500, true_mu=true_mu)
+    events = [
+        _event(
+            source_event_id=f"gr-chain-{index}",
+            event_time=window_start + timedelta(hours=index),
+            available_at=window_start + timedelta(hours=index, minutes=5),
+            magnitude=magnitude,
+        )
+        for index, magnitude in enumerate(magnitudes)
+    ]
+    with Session(postgis_engine, expire_on_commit=False) as session:
+        sync_source_registry(
+            session,
+            load_source_registry(Path("config/source-registry.yaml")),
+        )
+        await IngestionService(session, RawArchive(tmp_path / "raw")).run(
+            FixtureEventAdapter(events)
+        )
+
+        completeness_service = CompletenessEstimationService(
+            session, policy=CompletenessPolicy(emr_bootstrap_resamples=15)
+        )
+        mc_record = completeness_service.estimate_entire_magnitude_range(
+            as_of=as_of,
+            start_time=window_start,
+            end_time=window_end,
+            magnitude_type="ml",
+        )
+        assert mc_record.mc_value is not None
+
+        gr_record = GutenbergRichterEstimationService(session).estimate_for_completeness_estimate(
+            mc_record.id
+        )
+
+        assert gr_record.completeness_estimate_id == mc_record.id
+        assert gr_record.mc_used == mc_record.mc_value
+        assert gr_record.start_time == mc_record.start_time
+        assert gr_record.end_time == mc_record.end_time
+        assert gr_record.magnitude_type == mc_record.magnitude_type
+        assert gr_record.support_state != "not_estimable"
+        assert gr_record.b_value == pytest.approx(1.0, abs=0.2)
+        assert gr_record.b_value_standard_error is not None
+        assert gr_record.id is not None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_gutenberg_richter_refuses_a_completeness_estimate_without_mc(
+    postgis_engine: Engine,
+    tmp_path: Path,
+) -> None:
+    window_start = datetime(2026, 1, 1, tzinfo=UTC)
+    window_end = window_start + timedelta(days=1)
+    as_of = window_end
+
+    with Session(postgis_engine, expire_on_commit=False) as session:
+        sync_source_registry(
+            session,
+            load_source_registry(Path("config/source-registry.yaml")),
+        )
+        # No events ingested at all: the completeness estimate is
+        # not_estimable and carries mc_value=None.
+        mc_record = CompletenessEstimationService(session).estimate_maximum_curvature(
+            as_of=as_of,
+            start_time=window_start,
+            end_time=window_end,
+            magnitude_type="ml",
+        )
+        assert mc_record.mc_value is None
+
+        with pytest.raises(ValueError, match="no mc_value"):
+            GutenbergRichterEstimationService(session).estimate_for_completeness_estimate(
+                mc_record.id
+            )

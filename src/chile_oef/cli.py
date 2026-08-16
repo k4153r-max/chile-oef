@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import uuid
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -17,7 +18,10 @@ from chile_oef.ingestion.sources.csn_daily import CsnDailyAdapter
 from chile_oef.ingestion.sources.usgs_fdsn import UsgsFdsnAdapter
 from chile_oef.ingestion.sources.usgs_geojson import UsgsGeoJsonAdapter
 from chile_oef.seismicity.completeness import load_completeness_policy
-from chile_oef.seismicity.service import CompletenessEstimationService
+from chile_oef.seismicity.service import (
+    CompletenessEstimationService,
+    GutenbergRichterEstimationService,
+)
 from chile_oef.tectonics.assets import TectonicAssetService
 from chile_oef.tectonics.classification import load_classification_parameters
 from chile_oef.tectonics.faults import FaultService
@@ -101,6 +105,12 @@ def build_parser() -> argparse.ArgumentParser:
     completeness.add_argument("--max-latitude", type=float)
     completeness.add_argument("--min-longitude", type=float)
     completeness.add_argument("--max-longitude", type=float)
+
+    gutenberg_richter = subparsers.add_parser(
+        "estimate-gutenberg-richter",
+        help="fit the Gutenberg-Richter b-value above a specific completeness estimate's Mc",
+    )
+    gutenberg_richter.add_argument("--completeness-estimate-id", type=uuid.UUID, required=True)
     return parser
 
 
@@ -279,6 +289,18 @@ def main() -> None:
             f"method={args.method} event_count={record.event_count} "
             f"support_state={record.support_state} mc_value={record.mc_value} "
             f"role={record.role}"
+        )
+        return
+    if args.command == "estimate-gutenberg-richter":
+        with SessionLocal() as session:
+            record = GutenbergRichterEstimationService(
+                session,
+                policy=load_completeness_policy(settings.completeness_policy_path),
+            ).estimate_for_completeness_estimate(args.completeness_estimate_id)
+        print(
+            f"mc_used={record.mc_used} events_at_or_above_mc={record.events_at_or_above_mc} "
+            f"support_state={record.support_state} b_value={record.b_value} "
+            f"b_value_standard_error={record.b_value_standard_error} a_value={record.a_value}"
         )
         return
     if args.command == "ingest-usgs-feed":

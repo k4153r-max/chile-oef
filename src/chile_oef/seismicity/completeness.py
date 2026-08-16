@@ -37,6 +37,8 @@ class CompletenessPolicy:
     emr_sigma_max_magnitude: float = 2.0
     emr_beta_min: float = 0.01
     emr_beta_max: float = 10.0
+    gutenberg_richter_method_version: str = "gutenberg_richter_aki_mle_v1"
+    gutenberg_richter_calibration_status: str = "uncalibrated_mle_estimator"
 
 
 def load_completeness_policy(path: Path) -> CompletenessPolicy:
