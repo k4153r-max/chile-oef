@@ -207,3 +207,38 @@ class SeismicCellBackgroundRate(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class ModifiedOmoriSequenceEstimate(Base):
+    """Append-only, one row per aftershock family per declustering run. A
+    family is every triggered event whose parent chain (as recorded in
+    EventDeclusteringClassification) leads back to the same background
+    (root) event.
+    """
+
+    __tablename__ = "modified_omori_sequence_estimates"
+    __table_args__ = (
+        CheckConstraint("event_count >= 0", name="event_count_non_negative"),
+        Index("ix_modified_omori_sequence_estimates_run", "declustering_run_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    declustering_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("seismicity_declustering_runs.id"), nullable=False
+    )
+    root_event_revision_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("event_revisions.id"), nullable=False
+    )
+    event_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    support_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    observation_duration_days: Mapped[float] = mapped_column(Float, nullable=False)
+    k_productivity: Mapped[float | None] = mapped_column(Float)
+    c_days: Mapped[float | None] = mapped_column(Float)
+    p_exponent: Mapped[float | None] = mapped_column(Float)
+    converged: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    method_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    calibration_status: Mapped[str] = mapped_column(String(64), nullable=False)
+    diagnostics_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )

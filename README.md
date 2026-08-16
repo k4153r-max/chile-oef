@@ -37,9 +37,11 @@ completeness slice:
   Gutenberg-Richter estimate it cites;
 - smoothed adaptive-kernel background rate (Helmstetter, Kagan & Jackson
   2007) over a declustering run's background subset, evaluated on a Phase 2
-  grid.
+  grid;
+- Modified Omori-Utsu aftershock sequence fits (Ogata 1983) over each
+  triggered family a declustering run identifies.
 
-Omori, ETAS, IAS and ML are deliberately not implemented
+ETAS, IAS and ML are deliberately not implemented
 yet. The tectonic class uncertainty masses are not calibrated forecast
 probabilities.
 

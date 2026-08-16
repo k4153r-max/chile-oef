@@ -446,12 +446,69 @@ background rate): **85 tests passed** (78 prior + 7 new), Ruff,
 `ruff format --check`, and `alembic check` all passed. Migration `0008`
 applied cleanly against the real dev database.
 
+### Phase 3 continued — Modified Omori-Utsu aftershock sequences implemented and validated
+
+Added on 2026-08-16, same session. Completes item 6 of Exact next work (all
+of: three Mc estimators, Gutenberg-Richter, declustering, smoothed
+background rate, Modified Omori now exist).
+
+- `src/chile_oef/seismicity/modified_omori.py::estimate_modified_omori`:
+  Ogata (1983) maximum-likelihood fit of `n(t) = K/(t+c)^p` to one
+  aftershock sequence's arrival times. `K` is profiled out analytically
+  given `(c, p)`, leaving a 2-parameter numerical optimization. The
+  observation duration `T` used in the likelihood integral is an explicit
+  required argument (time from the root/triggering event to the end of the
+  analysis window) -- deliberately not `max(event_times)`, which would
+  truncation-bias the fit toward whatever happened to be observed rather
+  than the true window.
+- A real convergence failure was hit and fixed during integration testing,
+  not invented for the changelog: on a real declustering run's largest
+  family (390 events), `scipy.optimize.minimize` with `L-BFGS-B` returned
+  `ABNORMAL_TERMINATION_IN_LNSRCH`. Fixed with an explicit Nelder-Mead
+  fallback (gradient-free, slower, more robust to this likelihood surface's
+  curvature) rather than silently lowering tolerances or picking a
+  different default method; the diagnostics record which optimizer actually
+  produced the result (`optimizer_message`/`lbfgsb_message`) so this isn't
+  hidden.
+- Family resolution (`service.py::_resolve_family_roots`): for every
+  triggered event, walks its `parent_event_revision_id` chain up to the
+  nearest background ancestor (handles secondary triggering -- an
+  aftershock triggering its own aftershock -- not just immediate parent
+  grouping). Events whose chain resolves to `None`/unclassified rather than
+  a confirmed background root are excluded rather than guessed into a
+  family.
+- `db/models/seismicity.py::ModifiedOmoriSequenceEstimate` (append-only, FK
+  to `SeismicityDeclusteringRun` and to the family's root `EventRevision`)
+  + Alembic migration `0009`.
+- `ModifiedOmoriService.estimate_for_declustering_run` fits every family
+  with at least one triggered event in a run (families below the minimum
+  sample size still get a `not_estimable` row, for the same auditability
+  reason every other estimator here persists refusals). CLI:
+  `chile-oef fit-modified-omori --declustering-run-id <uuid>`.
+- Verified against an independently re-derived (not calling into the module
+  under test) inverse-CDF sample from the exact `K/(t+c)^p` process: at
+  `K=50, c=0.05, p=1.1`, recovered `p=1.11`, `c=0.041`, `K=44.1` (K is the
+  most sample-variance-sensitive of the three, since it compounds errors in
+  `c` and `p` through the likelihood integral). A Postgres-backed
+  integration test runs the full five-step chain (ingest -> Mc -> b ->
+  decluster -> Modified Omori) with a real magnitude-6.0 mainshock and a
+  384-event synthetic Omori-decaying sequence; the resolved family recovers
+  ~390 events (a magnitude-6.0 mainshock has a large "reach" in the
+  nearest-neighbor eta metric, so a handful of unrelated background events
+  get pulled in -- an expected declustering characteristic documented in
+  the test, not silently hidden by a loose enough tolerance to look exact)
+  and `p` within 0.3 of the true value.
+
+Final gate on 2026-08-16 (Phase 3 total, all six pieces of item 6): **91
+tests passed** (85 prior + 6 new), Ruff, `ruff format --check`, and
+`alembic check` all passed. Migration `0009` applied cleanly against the
+real dev database.
+
 Still not done for seismicity: no forecast, no public API endpoint for any
-of these six models -- everything so far is CLI/service-only. Modified
-Omori for the triggered subset (grouped by inferred parent, using the
-`parent_event_revision_id` linkage `EventDeclusteringClassification`
-already records) is the last piece before ETAS
-(docs/scientific-methodology.md's progression).
+of these six models -- everything so far is CLI/service-only. Temporal
+ETAS (docs/scientific-methodology.md's next progression step) is not
+implemented; per the roadmap, it should build on the background rate and
+Modified Omori baselines now in place, not skip them.
 
 ## Verified static data releases
 
@@ -513,14 +570,19 @@ The following should be done next, in this order:
    yet extended to declustering specifically; the declustering integration
    test verifies correctness on a real-ingested catalog but does not yet
    have a dedicated late-arriving-revision walk-forward case.
-6. ~~Declustered background~~ — nearest-neighbor declustering AND smoothed
-   adaptive-kernel background rate both done 2026-08-16 (see Phase 3
-   continued sections above). Remaining: Modified Omori-Utsu sequence fits
-   over the triggered subset (grouped by inferred parent, per the
-   `parent_event_revision_id` linkage `EventDeclusteringClassification`
-   already records -- each parent's children, ordered by time since the
-   parent, form one aftershock sequence to fit `n(t) = K/(t+c)^p` against).
-   Temporal ETAS follows that baseline.
+6. ~~Declustered background, smoothed background rate, and Modified
+   Omori~~ — all done 2026-08-16 (see Phase 3 continued sections above).
+7. Temporal ETAS is the next real step. It should build on, not bypass, the
+   baselines above: background rate (already gridded) as the
+   time-independent term, and Modified Omori's `(K, c, p)` as the starting
+   point / cross-check for ETAS's own triggering-kernel parameters, per
+   docs/scientific-methodology.md's stated progression ("No later stage is
+   promoted merely because it is more complex"). ETAS needs a
+   space-time-magnitude MLE over the *entire* catalog jointly (not
+   per-family, unlike Modified Omori) -- expect this to need its own design
+   pass on the likelihood/optimization approach before implementation,
+   given it is a materially harder numerical problem than anything
+   implemented so far in this repository.
 
 ## Known technical risks and decisions still to verify
 

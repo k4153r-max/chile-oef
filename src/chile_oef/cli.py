@@ -23,6 +23,7 @@ from chile_oef.seismicity.service import (
     CompletenessEstimationService,
     DeclusteringService,
     GutenbergRichterEstimationService,
+    ModifiedOmoriService,
 )
 from chile_oef.tectonics.assets import TectonicAssetService
 from chile_oef.tectonics.classification import load_classification_parameters
@@ -126,6 +127,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     background_rate.add_argument("--declustering-run-id", type=uuid.UUID, required=True)
     background_rate.add_argument("--grid-id", required=True)
+
+    omori = subparsers.add_parser(
+        "fit-modified-omori",
+        help="fit Modified Omori-Utsu sequences for every aftershock family in a declustering run",
+    )
+    omori.add_argument("--declustering-run-id", type=uuid.UUID, required=True)
     return parser
 
 
@@ -339,6 +346,14 @@ def main() -> None:
             f"observation_duration_days={background_rate_run.observation_duration_days} "
             f"grid_id={background_rate_run.grid_id}"
         )
+        return
+    if args.command == "fit-modified-omori":
+        with SessionLocal() as session:
+            records = ModifiedOmoriService(session).estimate_for_declustering_run(
+                args.declustering_run_id
+            )
+        estimable = [record for record in records if record.support_state == "estimable"]
+        print(f"families={len(records)} estimable={len(estimable)}")
         return
     if args.command == "ingest-usgs-feed":
         adapter = UsgsGeoJsonAdapter(

@@ -9,6 +9,7 @@ from chile_oef.db.models import (
     EventDeclusteringClassification,
     EventRevision,
     GutenbergRichterEstimate,
+    ModifiedOmoriSequenceEstimate,
     SeismicCell,
     SeismicCellBackgroundRate,
     SeismicityBackgroundRateRun,
@@ -38,6 +39,7 @@ from chile_oef.seismicity.declustering import (
     decluster,
 )
 from chile_oef.seismicity.gutenberg_richter import estimate_b_value
+from chile_oef.seismicity.modified_omori import ModifiedOmoriPolicy, estimate_modified_omori
 
 
 class CompletenessEstimationService:
@@ -461,3 +463,109 @@ class BackgroundRateService:
         )
         self.session.commit()
         return background_rate_run
+
+
+def _resolve_family_roots(
+    classifications: list[tuple[uuid.UUID, uuid.UUID | None, bool | None]],
+) -> dict[uuid.UUID, uuid.UUID]:
+    """For every triggered event, walk its parent chain (as recorded by
+    declustering) up to the nearest background ancestor -- that ancestor is
+    the family root every event in one aftershock sequence shares, even
+    across secondary triggering (an aftershock triggering its own
+    aftershock). Returns {triggered_event_id: family_root_id}.
+    """
+    parent_by_id = {event_id: parent_id for event_id, parent_id, _is_background in classifications}
+    is_background_by_id = {
+        event_id: is_background for event_id, _parent_id, is_background in classifications
+    }
+    family_root_by_id: dict[uuid.UUID, uuid.UUID] = {}
+    for event_id, _parent_id, is_background in classifications:
+        if is_background is not False:
+            continue
+        current = event_id
+        while is_background_by_id.get(current) is False:
+            parent = parent_by_id.get(current)
+            if parent is None:
+                break
+            current = parent
+        if is_background_by_id.get(current) is True:
+            family_root_by_id[event_id] = current
+    return family_root_by_id
+
+
+class ModifiedOmoriService:
+    def __init__(self, session: Session, *, policy: ModifiedOmoriPolicy | None = None) -> None:
+        self.session = session
+        self.policy = policy or ModifiedOmoriPolicy()
+
+    def estimate_for_declustering_run(
+        self, declustering_run_id: uuid.UUID
+    ) -> list[ModifiedOmoriSequenceEstimate]:
+        """Fit a Modified Omori-Utsu sequence for every aftershock family
+        (grouped by root ancestor, see _resolve_family_roots) in a specific
+        declustering run with at least one triggered event. Families below
+        the minimum sample size still get a not_estimable row, for the same
+        auditability reason every other estimator here persists refusals.
+        """
+        run = self.session.get(SeismicityDeclusteringRun, declustering_run_id)
+        if run is None:
+            raise ValueError(f"declustering run {declustering_run_id} not found")
+
+        rows = self.session.execute(
+            select(
+                EventDeclusteringClassification.event_revision_id,
+                EventDeclusteringClassification.parent_event_revision_id,
+                EventDeclusteringClassification.is_background,
+            ).where(EventDeclusteringClassification.declustering_run_id == run.id)
+        ).all()
+        family_root_by_event_id = _resolve_family_roots([tuple(row) for row in rows])
+
+        children_by_root: dict[uuid.UUID, list[uuid.UUID]] = {}
+        for event_id, root_id in family_root_by_event_id.items():
+            children_by_root.setdefault(root_id, []).append(event_id)
+
+        if not children_by_root:
+            return []
+
+        event_ids = set(children_by_root.keys())
+        for children in children_by_root.values():
+            event_ids.update(children)
+        event_times_by_id = dict(
+            self.session.execute(
+                select(EventRevision.id, EventRevision.event_time).where(
+                    EventRevision.id.in_(event_ids)
+                )
+            ).all()
+        )
+
+        records: list[ModifiedOmoriSequenceEstimate] = []
+        for root_id, children in children_by_root.items():
+            root_time = event_times_by_id[root_id]
+            observation_duration_days = (run.end_time - root_time).total_seconds() / 86400.0
+            event_times_days = sorted(
+                (event_times_by_id[child_id] - root_time).total_seconds() / 86400.0
+                for child_id in children
+            )
+            result = estimate_modified_omori(
+                event_times_days,
+                observation_duration_days=observation_duration_days,
+                policy=self.policy,
+            )
+            record = ModifiedOmoriSequenceEstimate(
+                declustering_run_id=run.id,
+                root_event_revision_id=root_id,
+                event_count=result.event_count,
+                support_state=result.support_state,
+                observation_duration_days=result.observation_duration_days,
+                k_productivity=result.k_productivity,
+                c_days=result.c_days,
+                p_exponent=result.p_exponent,
+                converged=result.converged,
+                method_version=result.method_version,
+                calibration_status=result.calibration_status,
+                diagnostics_json=result.diagnostics,
+            )
+            self.session.add(record)
+            records.append(record)
+        self.session.commit()
+        return records
