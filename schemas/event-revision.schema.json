@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chile-oef.invalid/schemas/event-revision.schema.json",
+  "title": "Immutable event revision",
+  "allOf": [{"$ref": "source-event.schema.json"}],
+  "type": "object",
+  "required": ["revision_hash", "raw_artifact_sha256"],
+  "properties": {
+    "revision_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "raw_artifact_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}
+

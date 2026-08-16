@@ -1,0 +1,28 @@
+version: 1
+status: draft
+issue_schedule:
+  regular_cron: "0 * * * *"
+  timezone: UTC
+  event_triggered_additional_runs: true
+horizons:
+  - {id: PT6H, seconds: 21600}
+  - {id: P1D, seconds: 86400}
+  - {id: P3D, seconds: 259200}
+  - {id: P7D, seconds: 604800}
+magnitude_bins:
+  - {lower: 3.0, upper: 4.0}
+  - {lower: 4.0, upper: 5.0}
+  - {lower: 5.0, upper: 6.0}
+  - {lower: 6.0, upper: 7.0}
+  - {lower: 7.0, upper: null, status: experimental}
+grid:
+  id: chile_regular_0_1_v1
+  resolution_degrees: 0.1
+  status: draft
+estimability:
+  reject_threshold_below_mc: true
+  stale_data_action: not_estimable
+immutability:
+  update_published_forecast: prohibited
+  delete_published_forecast: prohibited
+

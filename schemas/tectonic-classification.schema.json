@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chile-oef.invalid/schemas/tectonic-classification.schema.json",
+  "title": "Versioned tectonic classification result",
+  "type": "object",
+  "required": [
+    "id", "event_revision_id", "slab_release_id", "fault_release_id",
+    "method_version", "calibration_status", "label", "max_probability",
+    "probabilities", "diagnostics", "created_at"
+  ],
+  "properties": {
+    "id": {"type": "string", "format": "uuid"},
+    "event_revision_id": {"type": "string", "format": "uuid"},
+    "slab_release_id": {"type": "string", "format": "uuid"},
+    "fault_release_id": {"type": ["string", "null"], "format": "uuid"},
+    "method_version": {"type": "string", "minLength": 1},
+    "calibration_status": {"enum": ["uncalibrated_rule_baseline", "calibrated"]},
+    "label": {
+      "enum": ["interface", "intraslab", "crustal", "outer_rise", "volcanic", "unknown"]
+    },
+    "max_probability": {"type": "number", "minimum": 0, "maximum": 1},
+    "slab_depth_km": {"type": ["number", "null"], "minimum": 0},
+    "signed_vertical_residual_km": {"type": ["number", "null"]},
+    "signed_normal_distance_km": {"type": ["number", "null"]},
+    "horizontal_fault_distance_km": {"type": ["number", "null"], "minimum": 0},
+    "probabilities": {
+      "type": "object",
+      "required": ["interface", "intraslab", "crustal", "outer_rise", "volcanic", "unknown"],
+      "properties": {
+        "interface": {"type": "number", "minimum": 0, "maximum": 1},
+        "intraslab": {"type": "number", "minimum": 0, "maximum": 1},
+        "crustal": {"type": "number", "minimum": 0, "maximum": 1},
+        "outer_rise": {"type": "number", "minimum": 0, "maximum": 1},
+        "volcanic": {"type": "number", "minimum": 0, "maximum": 1},
+        "unknown": {"type": "number", "minimum": 0, "maximum": 1}
+      },
+      "additionalProperties": false
+    },
+    "diagnostics": {"type": "object"},
+    "created_at": {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": false
+}

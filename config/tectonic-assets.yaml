@@ -1,0 +1,54 @@
+version: 1
+reviewed_at: 2026-08-16T00:00:00Z
+releases:
+  - id: slab2_south_america_2018
+    source_id: slab2_south_america_2018
+    release_id: sam_02.23.18
+    title: Slab2 - A Comprehensive Subduction Zone Geometry Model, South America Region
+    doi: https://doi.org/10.5066/F7PV6JNV
+    license: US-public-domain
+    parser: slab2_xyz_v1
+    grid:
+      resolution_degrees: 0.05
+      longitude_convention: 0_360
+      depth_convention: negative_down_km
+    assets:
+      - type: depth
+        filename: sam_slab2_dep_02.23.18.xyz
+        url: https://www.sciencebase.gov/catalog/file/get/5aa41473e4b0b1c392eaaf2d?f=__disk__ed%2F3c%2F4e%2Fed3c4e0f103ef6decb589ffb5462597b5c9935f0
+        byte_length: 14339837
+        sha256: 0522c999fcd3f80422407e0f6bdb4cb1ce09bd2cf1f13d68c2b169c26762bbca
+      - type: dip
+        filename: sam_slab2_dip_02.23.18.xyz
+        url: https://www.sciencebase.gov/catalog/file/get/5aa41473e4b0b1c392eaaf2d?f=__disk__2d%2Fe0%2Fe4%2F2de0e49f9bf84f22da7eb682fa50e01d39be0250
+        byte_length: 14134592
+        sha256: dcdd1c10ceaf5423a9f4ffbd7a238525f24112d66a83e2e62ce9ae7576c6411c
+      - type: strike
+        filename: sam_slab2_str_02.23.18.xyz
+        url: https://www.sciencebase.gov/catalog/file/get/5aa41473e4b0b1c392eaaf2d?f=__disk__2b%2F7c%2F2a%2F2b7c2a7dc6c68a01be62d9aa51f79a8cc4e12cae
+        byte_length: 14136413
+        sha256: c138d970788e9c1d4efa95a25ce0b62472cc6c3f53457adfb48db5a3536d7422
+      - type: thickness
+        filename: sam_slab2_thk_02.23.18.xyz
+        url: https://www.sciencebase.gov/catalog/file/get/5aa41473e4b0b1c392eaaf2d?f=__disk__ad%2F08%2Fce%2Fad08ce3ca8f67b74227f9773fa010d8858ed20a1
+        byte_length: 14134504
+        sha256: 0d46977fb483ddc8553eac14db67f9dca51a4cb7e262f2b4e7fad6d73809f604
+      - type: uncertainty
+        filename: sam_slab2_unc_02.23.18.xyz
+        url: https://www.sciencebase.gov/catalog/file/get/5aa41473e4b0b1c392eaaf2d?f=__disk__5a%2F45%2F1f%2F5a451f71d2fc1cdf212453a5b8e3c99f5ebf4aa3
+        byte_length: 14133924
+        sha256: e21d3d7b65f7da0be5cb6952ec901d359da514d20e02428495c579d798a971dc
+
+  - id: chaf_2020
+    source_id: chaf_2020
+    release_id: pangaea_922241_v1
+    title: Database of active and potentially-active continental faults in Chile
+    doi: https://doi.org/10.1594/PANGAEA.922241
+    license: CC-BY-4.0
+    parser: chaf_shapefile_v1
+    assets:
+      - type: faults_shapefile
+        filename: CHAF_Pangaea_v1.zip
+        url: https://download.pangaea.de/dataset/922241/files/CHAF_Pangaea_v1.zip
+        byte_length: 253556
+        sha256: e42fd56cd0dddec384e9dcbede0fc801e30d3f19ba0aa9987c3c832148ead59b

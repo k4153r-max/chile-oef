@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chile-oef.invalid/schemas/source-event.schema.json",
+  "title": "Normalized source event",
+  "type": "object",
+  "required": [
+    "source_id", "source_event_id", "event_time", "latitude", "longitude",
+    "received_at", "available_at"
+  ],
+  "properties": {
+    "source_id": {"type": "string", "minLength": 1},
+    "source_event_id": {"type": "string", "minLength": 1},
+    "event_time": {"type": "string", "format": "date-time"},
+    "source_updated_at": {"type": ["string", "null"], "format": "date-time"},
+    "received_at": {"type": "string", "format": "date-time"},
+    "available_at": {"type": "string", "format": "date-time"},
+    "latitude": {"type": "number", "minimum": -90, "maximum": 90},
+    "longitude": {"type": "number", "minimum": -180, "maximum": 180},
+    "depth_km": {"type": ["number", "null"]},
+    "magnitude": {"type": ["number", "null"]},
+    "magnitude_type": {"type": ["string", "null"]},
+    "place": {"type": ["string", "null"]}
+  },
+  "additionalProperties": true
+}
+

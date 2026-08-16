@@ -1,0 +1,15 @@
+version: 1
+status: experimental
+method_version: slab_residual_uncalibrated_v1
+calibration_status: uncalibrated_rule_baseline
+interface_half_width_km: 10.0
+default_event_depth_uncertainty_km: 15.0
+default_slab_uncertainty_km: 10.0
+default_slab_thickness_km: 60.0
+maximum_crustal_depth_km: 50.0
+minimum_label_probability: 0.60
+restrictions:
+  chaf_distance_changes_probability: false
+  may_publish_as_calibrated_probability: false
+  outer_rise_enabled: false
+  volcanic_enabled: false

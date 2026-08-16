@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chile-oef"
+version = "0.1.0"
+description = "Experimental probabilistic earthquake forecasting research platform for Chile"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "BSD-3-Clause"
+authors = [{ name = "CHILE-OEF contributors" }]
+dependencies = [
+  "alembic>=1.16,<2",
+  "fastapi>=0.116,<1",
+  "geoalchemy2>=0.18,<1",
+  "httpx>=0.28,<1",
+  "orjson>=3.10,<4",
+  "psycopg[binary]>=3.2,<4",
+  "pydantic>=2.11,<3",
+  "pydantic-settings>=2.10,<3",
+  "pyshp>=2.3,<3",
+  "python-dateutil>=2.9,<3",
+  "pyyaml>=6,<7",
+  "sqlalchemy>=2.0.41,<3",
+  "tenacity>=9,<10",
+]
+
+[project.optional-dependencies]
+dev = [
+  "jsonschema>=4.24,<5",
+  "pytest>=8.4,<10",
+  "pytest-asyncio>=1,<2",
+  "pytest-cov>=6,<8",
+  "respx>=0.22,<1",
+  "ruff>=0.12,<1",
+]
+
+[project.scripts]
+chile-oef = "chile_oef.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers"
+testpaths = ["tests"]
+markers = [
+  "integration: requires PostgreSQL/PostGIS",
+  "network: accesses an external scientific service",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

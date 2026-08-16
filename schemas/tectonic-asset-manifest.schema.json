@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chile-oef.invalid/schemas/tectonic-asset-manifest.schema.json",
+  "title": "Pinned tectonic asset manifest",
+  "type": "object",
+  "required": ["id", "source_id", "release_id", "title", "doi", "license", "parser", "assets"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "source_id": {"type": "string", "minLength": 1},
+    "release_id": {"type": "string", "minLength": 1},
+    "title": {"type": "string", "minLength": 1},
+    "doi": {"type": "string", "pattern": "^https://doi\\.org/"},
+    "license": {"type": "string", "minLength": 1},
+    "parser": {"type": "string", "minLength": 1},
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["type", "filename", "url", "byte_length", "sha256"],
+        "properties": {
+          "type": {"type": "string", "minLength": 1},
+          "filename": {"type": "string", "minLength": 1},
+          "url": {"type": "string", "pattern": "^https://"},
+          "byte_length": {"type": "integer", "exclusiveMinimum": 0},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,28 @@
+version: 1
+targets:
+  - id: event_m4_next_24h_v1
+    kind: binary_exceedance
+    magnitude_threshold: 4.0
+    horizon: P1D
+    interval: "(issued_at, valid_until]"
+    truth_policy: canonical_adjudicated_v1
+  - id: event_m5_next_72h_v1
+    kind: binary_exceedance
+    magnitude_threshold: 5.0
+    horizon: P3D
+    interval: "(issued_at, valid_until]"
+    truth_policy: canonical_adjudicated_v1
+  - id: count_mc_next_24h_v1
+    kind: count
+    threshold_policy: cell_mc_at_issue
+    horizon: P1D
+    interval: "(issued_at, valid_until]"
+    truth_policy: canonical_adjudicated_v1
+  - id: event_m7_next_7d_v1
+    kind: binary_exceedance
+    magnitude_threshold: 7.0
+    horizon: P7D
+    interval: "(issued_at, valid_until]"
+    truth_policy: canonical_adjudicated_v1
+    status: experimental
+

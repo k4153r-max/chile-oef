@@ -1,0 +1,11 @@
+version: 1
+preserve_native: true
+preferred_order_large_events: [mww, mwc, mwr, mw, ms, mb, ml, mlv, md]
+conversion:
+  overwrite_native: false
+  require_versioned_relation: true
+  propagate_uncertainty: true
+evaluation:
+  require_registered_policy: true
+  reject_unknown_type: false
+

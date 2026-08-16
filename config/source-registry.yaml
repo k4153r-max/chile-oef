@@ -1,0 +1,97 @@
+version: 1
+reviewed_at: 2026-08-16T00:00:00Z
+sources:
+  - id: usgs_comcat
+    authority: United States Geological Survey
+    role: event_catalog
+    endpoints:
+      - kind: fdsn_event
+        url: https://earthquake.usgs.gov/fdsnws/event/1/query
+        formats: [geojson, quakeml, csv]
+        constraints:
+          max_results: 20000
+      - kind: geojson_summary
+        url: https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson
+        formats: [geojson]
+        nominal_update_seconds: 60
+    historical_start: "1964-01-01 for systematic PDE; selected earlier events exist"
+    license: US-PD-with-third-party-caveat
+    attribution: U.S. Geological Survey and contributing network
+    stability: high
+    enabled: true
+
+  - id: csn_daily
+    authority: Centro Sismologico Nacional de la Universidad de Chile
+    role: event_catalog
+    endpoints:
+      - kind: html_daily
+        url_template: https://www.sismologia.cl/sismicidad/catalogo/{YYYY}/{MM}/{YYYYMMDD}.html
+        formats: [html]
+    historical_start: "daily pages verified at least back to 2010"
+    license: CSN-academic-and-outreach-with-attribution
+    terms_url: https://www.sismologia.cl/accesos/uso-de-datos.html
+    attribution: Centro Sismologico Nacional de la Universidad de Chile
+    stability: medium-low
+    enabled: false
+    enablement_note: Enable after contact/rate policy and parser fixture review.
+
+  - id: csn_compiled_catalog
+    authority: Centro Sismologico Nacional de la Universidad de Chile
+    role: historical_catalog
+    endpoints:
+      - kind: csv_snapshot
+        url: https://owl.csn.uchile.cl/catalogo_csn.csv
+        formats: [csv]
+    historical_start: "1513 in snapshot inspected 2026-08-16; heterogeneous sources"
+    license: CSN-terms-require-review
+    stability: medium
+    enabled: false
+
+  - id: csn_fdsn_waveforms
+    authority: Centro Sismologico Nacional de la Universidad de Chile
+    role: stations_and_waveforms
+    endpoints:
+      - kind: fdsn_station
+        url: https://eew.csn.uchile.cl/fdsnws/station/1/query
+        formats: [stationxml]
+      - kind: fdsn_dataselect
+        url: https://eew.csn.uchile.cl/fdsnws/dataselect/1/query
+        formats: [miniseed]
+    license: CSN-public-with-attribution
+    stability: medium
+    enabled: false
+
+  - id: potin_1982_2020
+    authority: University of Chile and collaborators
+    role: research_catalog
+    endpoints:
+      - kind: zenodo
+        url: https://zenodo.org/records/13146436
+        formats: [csv]
+    historical_start: "1982"
+    historical_end: "2020-06"
+    license: clarification-required
+    stability: high
+    enabled: false
+
+  - id: slab2_south_america_2018
+    authority: United States Geological Survey
+    role: tectonic_model
+    endpoints:
+      - kind: data_release
+        url: https://doi.org/10.5066/F7PV6JNV
+        formats: [netcdf_gmt_grid]
+    license: US-public-domain
+    stability: high
+    enabled: true
+
+  - id: chaf_2020
+    authority: Melnick, Maldonado, and Contreras
+    role: active_faults
+    endpoints:
+      - kind: data_release
+        url: https://doi.org/10.1594/PANGAEA.922241
+        formats: [shapefile, kmz, xlsx]
+    license: CC-BY-4.0
+    stability: high
+    enabled: true

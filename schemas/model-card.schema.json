@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chile-oef.invalid/schemas/model-card.schema.json",
+  "title": "CHILE-OEF model card",
+  "type": "object",
+  "required": [
+    "model_id", "version", "status", "objective", "target_ids", "valid_region",
+    "training_period", "dataset_versions", "baselines", "known_failure_modes"
+  ],
+  "properties": {
+    "model_id": {"type": "string"},
+    "version": {"type": "string"},
+    "status": {"enum": ["research", "challenger", "shadow", "champion", "retired"]},
+    "objective": {"type": "string"},
+    "target_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "valid_region": {"type": "string"},
+    "training_period": {
+      "type": "object",
+      "required": ["start", "end"],
+      "properties": {
+        "start": {"type": "string", "format": "date-time"},
+        "end": {"type": "string", "format": "date-time"}
+      }
+    },
+    "dataset_versions": {"type": "array", "items": {"type": "string"}},
+    "baselines": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "known_failure_modes": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+  },
+  "additionalProperties": true
+}
+

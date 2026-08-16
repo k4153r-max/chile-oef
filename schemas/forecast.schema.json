@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chile-oef.invalid/schemas/forecast.schema.json",
+  "title": "Immutable probabilistic forecast value",
+  "type": "object",
+  "required": [
+    "forecast_id", "issued_at", "valid_from", "valid_until", "cell_id",
+    "magnitude_bin_lower", "expected_count", "model_version", "dataset_version",
+    "grid_version", "catalog_as_of", "estimability"
+  ],
+  "properties": {
+    "forecast_id": {"type": "string", "format": "uuid"},
+    "issued_at": {"type": "string", "format": "date-time"},
+    "valid_from": {"type": "string", "format": "date-time"},
+    "valid_until": {"type": "string", "format": "date-time"},
+    "cell_id": {"type": "string"},
+    "magnitude_bin_lower": {"type": "number"},
+    "magnitude_bin_upper": {"type": ["number", "null"]},
+    "expected_count": {"type": "number", "minimum": 0},
+    "probability_at_least_one": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "model_version": {"type": "string"},
+    "dataset_version": {"type": "string"},
+    "grid_version": {"type": "string"},
+    "catalog_as_of": {"type": "string", "format": "date-time"},
+    "estimability": {"enum": ["estimable", "not_estimable"]},
+    "not_estimable_reason": {"type": ["string", "null"]}
+  },
+  "additionalProperties": false
+}
+

@@ -1,0 +1,14 @@
+version: 1
+flags:
+  - missing_depth
+  - unknown_magnitude_type
+  - missing_magnitude
+  - location_uncertainty_unknown
+  - magnitude_uncertainty_unknown
+  - duplicate_candidate
+  - late_arrival
+  - source_conflict
+  - implausible_coordinates
+  - implausible_depth
+  - schema_drift
+

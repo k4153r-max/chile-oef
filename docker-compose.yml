@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    environment:
+      POSTGRES_DB: chile_oef
+      POSTGRES_USER: chile_oef
+      POSTGRES_PASSWORD: chile_oef
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chile_oef -d chile_oef"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - chile_oef_pgdata:/var/lib/postgresql/data
+
+volumes:
+  chile_oef_pgdata:
+

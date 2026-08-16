@@ -1,0 +1,14 @@
+version: 1
+split: nested_walk_forward
+minimum_embargo: max_forecast_horizon
+primary_scores:
+  binary: [log_loss, brier_score, reliability]
+  count: [point_process_log_likelihood, deviance, predictive_coverage]
+  spatial: [information_gain_per_event, csep_spatial_test]
+rare_event_scores: [pr_auc, recall, false_alarm_rate]
+secondary_scores: [roc_auc, precision, f1]
+prohibited_primary_scores: [accuracy]
+resampling:
+  method: block_bootstrap
+  blocks: [time, earthquake_sequence]
+

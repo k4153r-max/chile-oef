@@ -1,0 +1,46 @@
+{
+  "type": "FeatureCollection",
+  "metadata": {
+    "generated": 1786900000000,
+    "url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson",
+    "count": 2
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "mag": 4.2,
+        "place": "80 km W of Valparaiso, Chile",
+        "time": 1786896000000,
+        "updated": 1786896300000,
+        "status": "reviewed",
+        "magType": "mww",
+        "horizontalError": 5.1,
+        "depthError": 3.2,
+        "magError": 0.08
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-72.4, -33.1, 25.0]
+      },
+      "id": "us-test-001"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "mag": 3.1,
+        "place": "Near Calama, Chile",
+        "time": 1786899600000,
+        "updated": 1786899900000,
+        "status": "automatic",
+        "magType": "ml"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-68.9, -22.5, 105.0]
+      },
+      "id": "us-test-002"
+    }
+  ]
+}
+

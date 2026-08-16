@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chile-oef.invalid/schemas/dataset-manifest.schema.json",
+  "title": "Dataset manifest",
+  "type": "object",
+  "required": [
+    "dataset_id",
+    "version",
+    "created_at",
+    "as_of",
+    "sources",
+    "artifacts",
+    "event_revisions",
+    "selection"
+  ],
+  "properties": {
+    "dataset_id": {"type": "string"},
+    "version": {"type": "string"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "as_of": {"type": "string", "format": "date-time"},
+    "sources": {"type": "array", "items": {"type": "string"}},
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sha256", "uri", "byte_length"],
+        "properties": {
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "uri": {"type": "string"},
+          "byte_length": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "event_revisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "source_id", "source_event_id", "revision_hash", "available_at"],
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "source_id": {"type": "string"},
+          "source_event_id": {"type": "string"},
+          "revision_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "available_at": {"type": "string", "format": "date-time"}
+        }
+      }
+    },
+    "selection": {
+      "type": "object",
+      "required": ["rule", "time_axis"],
+      "properties": {
+        "rule": {"type": "string"},
+        "time_axis": {"const": "available_at"}
+      }
+    }
+  },
+  "additionalProperties": true
+}
