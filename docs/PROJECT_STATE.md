@@ -1108,14 +1108,54 @@ needs, not a general CRUD API.
   as an open verification gap, not silently claimed as done).
 - `render.yaml` added (Render Blueprint, free tier: a Postgres database
   plus this API as a Python web service, mirroring `forja-web`'s existing
-  deployment pattern) but **not yet deployed** -- creating the actual
-  GitHub repo, Render database, and Render web service are real,
-  externally-visible account actions not taken without the user directly
-  in the loop. See "Exact next work" for what remains.
+  deployment pattern).
 
 156 tests passing (153 prior + 3 new settings-normalization unit tests;
 the dashboard API integration test was already included in the 153).
 Ruff, `ruff format --check`, and `alembic check` all clean.
+
+### Deployed: live public API and dashboard
+
+Deployed the same session, with the user directly in the loop for every
+account-level action (new GitHub repo, new Render Postgres, new Render
+web service).
+
+- Code: `github.com/k4153r-max/chile-oef` (public -- required for Render's
+  GitHub App to build a private-by-default new repo without a manual
+  installation-settings step; contains no secrets, no raw ingested data).
+- API: `chile-oef-api.onrender.com`, live, backed by a new free-tier
+  Render Postgres (`chile-oef-db`) with the real ingested catalog and
+  fitted models above. **The free Postgres plan expires 2026-09-15**
+  (30 days from creation, not 90) unless upgraded -- a real constraint
+  for anyone treating this as a durable public resource, not just a demo.
+- Dashboard: `etemen.cl/chile-oef/`, live, linked from ETEMEN's main nav,
+  footer, and a homepage "Investigación" section.
+- A genuine environment constraint surfaced during deploy: this session's
+  primary development environment can reach arbitrary HTTPS hosts but not
+  arbitrary TCP ports (Postgres's 5432 included) -- confirmed by testing
+  raw TCP (succeeds) vs. TLS-over-5432 (fails identically from Docker, the
+  host venv, and even GitHub Actions runners, ruling out a local-network
+  cause). The actual cause was simpler: Render's Postgres `ipAllowList`
+  defaults to fully closed to external traffic (internal Render-network
+  traffic, e.g. the API service's own connection, is unaffected) --
+  fixed by setting it temporarily via the API, restoring real data with
+  `pg_dump --data-only` / `pg_restore`, then closing it again afterward.
+  A GitHub Actions workflow (`.github/workflows/seed-production.yml`,
+  `scripts/seed_production_pipeline.py`) was built as an alternative path
+  before this was diagnosed and remains in the repo as a legitimate
+  from-scratch reseed option (manually triggered only, never on push).
+- Verified against the live, public endpoints, not just locally: real
+  catalog (74,384 events), real model summary (Mc/b/ETAS parameters), and
+  the real forecast run all confirmed serving correctly from
+  `chile-oef-api.onrender.com` after the data restore.
+- `forja-web` (ETEMEN's site repo) had been substantially redesigned by
+  unrelated concurrent work (a new "Hojear" product, a full v8/v9
+  "Cimientos" design-system rewrite, 48 commits) between when the
+  dashboard page was first drafted against the old design and when it was
+  ready to ship. Rather than force-merge a stale diff, the dashboard page
+  and homepage integration were rebuilt against the current live site
+  content and design tokens before pushing -- `git rebase --abort` and a
+  clean redo, not a forced overwrite of someone else's real work.
 
 ## Verified static data releases
 
