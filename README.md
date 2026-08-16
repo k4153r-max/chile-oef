@@ -34,10 +34,12 @@ completeness slice:
   always citing the specific completeness estimate whose Mc it used;
 - nearest-neighbor declustering (Baiesi & Paczuski 2004; Zaliapin &
   Ben-Zion 2013), separating background from triggered events using the
-  Gutenberg-Richter estimate it cites.
+  Gutenberg-Richter estimate it cites;
+- smoothed adaptive-kernel background rate (Helmstetter, Kagan & Jackson
+  2007) over a declustering run's background subset, evaluated on a Phase 2
+  grid.
 
-Smoothed background rate, Omori, ETAS, IAS and ML are deliberately not
-implemented
+Omori, ETAS, IAS and ML are deliberately not implemented
 yet. The tectonic class uncertainty masses are not calibrated forecast
 probabilities.
 

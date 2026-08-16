@@ -19,6 +19,7 @@ from chile_oef.ingestion.sources.usgs_fdsn import UsgsFdsnAdapter
 from chile_oef.ingestion.sources.usgs_geojson import UsgsGeoJsonAdapter
 from chile_oef.seismicity.completeness import load_completeness_policy
 from chile_oef.seismicity.service import (
+    BackgroundRateService,
     CompletenessEstimationService,
     DeclusteringService,
     GutenbergRichterEstimationService,
@@ -118,6 +119,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="nearest-neighbor decluster the catalog above a Gutenberg-Richter estimate's Mc",
     )
     decluster_parser.add_argument("--gutenberg-richter-estimate-id", type=uuid.UUID, required=True)
+
+    background_rate = subparsers.add_parser(
+        "estimate-background-rate",
+        help="smooth a declustering run's background subset over a grid (adaptive kernel)",
+    )
+    background_rate.add_argument("--declustering-run-id", type=uuid.UUID, required=True)
+    background_rate.add_argument("--grid-id", required=True)
     return parser
 
 
@@ -319,6 +327,17 @@ def main() -> None:
             f"event_count={run.event_count} classified={run.classified_event_count} "
             f"background={run.background_event_count} "
             f"log_eta_threshold={run.log_eta_threshold}"
+        )
+        return
+    if args.command == "estimate-background-rate":
+        with SessionLocal() as session:
+            background_rate_run = BackgroundRateService(session).estimate_for_declustering_run(
+                args.declustering_run_id, args.grid_id
+            )
+        print(
+            f"background_event_count={background_rate_run.background_event_count} "
+            f"observation_duration_days={background_rate_run.observation_duration_days} "
+            f"grid_id={background_rate_run.grid_id}"
         )
         return
     if args.command == "ingest-usgs-feed":

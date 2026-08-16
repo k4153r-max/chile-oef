@@ -1,13 +1,25 @@
 import uuid
 from datetime import datetime
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from chile_oef.db.models import (
     CompletenessEstimate,
     EventDeclusteringClassification,
+    EventRevision,
     GutenbergRichterEstimate,
+    SeismicCell,
+    SeismicCellBackgroundRate,
+    SeismicityBackgroundRateRun,
     SeismicityDeclusteringRun,
+    SpatialGrid,
+)
+from chile_oef.seismicity.background_rate import (
+    BackgroundEventLocation,
+    BackgroundRatePolicy,
+    GridCellTarget,
+    estimate_background_rate,
 )
 from chile_oef.seismicity.catalog_selection import (
     CatalogSelection,
@@ -365,3 +377,87 @@ class DeclusteringService:
         )
         self.session.commit()
         return run
+
+
+class BackgroundRateService:
+    def __init__(self, session: Session, *, policy: BackgroundRatePolicy | None = None) -> None:
+        self.session = session
+        self.policy = policy or BackgroundRatePolicy()
+
+    def estimate_for_declustering_run(
+        self, declustering_run_id: uuid.UUID, grid_id: str
+    ) -> SeismicityBackgroundRateRun:
+        """Smooth the background subset of a specific declustering run's
+        event classifications over a specific Phase 2 grid. Both are
+        required, explicit references -- there is no "current" run or grid.
+        """
+        run = self.session.get(SeismicityDeclusteringRun, declustering_run_id)
+        if run is None:
+            raise ValueError(f"declustering run {declustering_run_id} not found")
+        grid = self.session.get(SpatialGrid, grid_id)
+        if grid is None:
+            raise ValueError(f"grid {grid_id} not found")
+
+        background_rows = self.session.execute(
+            select(EventRevision.latitude, EventRevision.longitude)
+            .join(
+                EventDeclusteringClassification,
+                EventDeclusteringClassification.event_revision_id == EventRevision.id,
+            )
+            .where(
+                EventDeclusteringClassification.declustering_run_id == run.id,
+                EventDeclusteringClassification.is_background.is_(True),
+            )
+        ).all()
+        locations = [
+            BackgroundEventLocation(latitude=latitude, longitude=longitude)
+            for latitude, longitude in background_rows
+        ]
+
+        cells = list(
+            self.session.scalars(select(SeismicCell).where(SeismicCell.grid_id == grid_id))
+        )
+        cell_targets = [
+            GridCellTarget(
+                cell_id=cell.id,
+                center_latitude=cell.center_latitude,
+                center_longitude=cell.center_longitude,
+                area_km2=cell.area_km2,
+            )
+            for cell in cells
+        ]
+
+        observation_duration_days = (run.end_time - run.start_time).total_seconds() / 86400.0
+        result = estimate_background_rate(
+            locations,
+            cell_targets,
+            observation_duration_days=observation_duration_days,
+            policy=self.policy,
+        )
+
+        background_rate_run = SeismicityBackgroundRateRun(
+            declustering_run_id=run.id,
+            grid_id=grid_id,
+            k_nearest_neighbors=result.k_nearest_neighbors,
+            minimum_bandwidth_km=self.policy.minimum_bandwidth_km,
+            observation_duration_days=result.observation_duration_days,
+            background_event_count=result.background_event_count,
+            method_version=result.method_version,
+            calibration_status=result.calibration_status,
+            catalog_as_of=run.catalog_as_of,
+            diagnostics_json=result.diagnostics,
+        )
+        self.session.add(background_rate_run)
+        self.session.flush()
+
+        self.session.add_all(
+            SeismicCellBackgroundRate(
+                background_rate_run_id=background_rate_run.id,
+                cell_id=cell_rate.cell_id,
+                density_per_km2=cell_rate.density_per_km2,
+                rate_per_year=cell_rate.rate_per_year,
+            )
+            for cell_rate in result.cell_rates
+        )
+        self.session.commit()
+        return background_rate_run

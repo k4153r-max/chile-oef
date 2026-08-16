@@ -399,12 +399,59 @@ Final gate on 2026-08-16 (Phase 3 total, four estimators + declustering):
 `alembic check` all passed. Migration `0007` applied cleanly against the
 real dev database with `alembic check` reporting no drift.
 
+### Phase 3 continued — smoothed adaptive-kernel background rate implemented and validated
+
+Added on 2026-08-16, same session. Second model to chain three prior results
+together, and the first to touch Phase 2 infrastructure: it takes a
+`declustering_run_id` and a `grid_id` and evaluates the background subset's
+smoothed rate on that specific Phase 2 grid (`spatial_grids`/`seismic_cells`)
+-- the grid built for tectonic classification is now reused for seismicity,
+not duplicated.
+
+- `src/chile_oef/seismicity/background_rate.py::estimate_background_rate`:
+  Helmstetter, Kagan & Jackson (2007) adaptive Gaussian kernel. Each
+  background event's bandwidth is its haversine distance to its k-th
+  nearest *other* background event (`k=5`, a declared uncalibrated default,
+  floored at 1 km to avoid near-duplicate locations producing a spuriously
+  sharp kernel); summing all kernels at a grid cell's center gives a spatial
+  density that, divided by the observation duration in years and multiplied
+  by the cell's area (already stored from Phase 2's grid builder), gives an
+  expected annual event count for that cell.
+- Verified via the estimator's own mass-conservation identity: summed over a
+  grid padded well beyond the kernel bandwidths,
+  `sum(density_per_km2 * cell_area_km2)` recovers the background event count
+  to within 1% (199.999 vs. 200 in one check), and the equivalent
+  unpadded-grid sum recovers noticeably less -- both the correct-math case
+  and the documented finite-domain edge-effect are pinned as tests, not just
+  the happy path.
+- `db/models/seismicity.py::SeismicityBackgroundRateRun` (append-only, FKs
+  to both `SeismicityDeclusteringRun` and `SpatialGrid`) and
+  `SeismicCellBackgroundRate` (one append-only row per cell per run, FK to
+  `SeismicCell`) + Alembic migration `0008`.
+- `BackgroundRateService.estimate_for_declustering_run` and
+  `chile-oef estimate-background-rate --declustering-run-id <uuid> --grid-id <id>`.
+- A real-ingestion-backed integration test runs the full four-step chain
+  (ingest -> Mc -> b -> decluster -> background rate) against a real Phase 2
+  grid created in the same test via `GridService`, confirming both the
+  provenance FKs and the mass-conservation identity hold on queried
+  (not just synthetically constructed) data.
+- Known limitation, not yet addressed: bandwidth computation is O(n^2) in
+  the background event count (vectorized per event, not a spatial index),
+  and rate evaluation is O(n_events x n_cells) -- fine at current catalog
+  scale; documented the same way as declustering's and Slab2's known
+  scaling notes, not treated as a correctness blocker.
+
+Final gate on 2026-08-16 (Phase 3 total, five estimators + declustering +
+background rate): **85 tests passed** (78 prior + 7 new), Ruff,
+`ruff format --check`, and `alembic check` all passed. Migration `0008`
+applied cleanly against the real dev database.
+
 Still not done for seismicity: no forecast, no public API endpoint for any
-of these five models (three Mc estimators + GR + declustering) --
-everything so far is CLI/service-only. Smoothed adaptive-kernel background
-rate estimation over the background subset this declustering step produces,
-and Modified Omori for the triggered subset, are the next two pieces before
-ETAS (docs/scientific-methodology.md's progression).
+of these six models -- everything so far is CLI/service-only. Modified
+Omori for the triggered subset (grouped by inferred parent, using the
+`parent_event_revision_id` linkage `EventDeclusteringClassification`
+already records) is the last piece before ETAS
+(docs/scientific-methodology.md's progression).
 
 ## Verified static data releases
 
@@ -466,17 +513,14 @@ The following should be done next, in this order:
    yet extended to declustering specifically; the declustering integration
    test verifies correctness on a real-ingested catalog but does not yet
    have a dedicated late-arriving-revision walk-forward case.
-6. ~~Declustered background~~ — nearest-neighbor declustering done
-   2026-08-16 (see Phase 3 continued section above). Remaining: (a)
-   smoothed adaptive-kernel background rate estimation over the resulting
-   background subset (Helmstetter, Kagan & Jackson 2007 -- for each grid
-   cell, sum Gaussian kernels centered on background events with
-   per-event adaptive bandwidth from k-nearest-neighbor spacing; the
-   existing `spatial_grids`/`seismic_cells` tables from Phase 2 are the
-   natural place to evaluate this), and (b) Modified Omori-Utsu sequence
-   fits over the triggered subset (grouped by inferred parent, per the
+6. ~~Declustered background~~ — nearest-neighbor declustering AND smoothed
+   adaptive-kernel background rate both done 2026-08-16 (see Phase 3
+   continued sections above). Remaining: Modified Omori-Utsu sequence fits
+   over the triggered subset (grouped by inferred parent, per the
    `parent_event_revision_id` linkage `EventDeclusteringClassification`
-   already records). Temporal ETAS follows those two baselines.
+   already records -- each parent's children, ordered by time since the
+   parent, form one aftershock sequence to fit `n(t) = K/(t+c)^p` against).
+   Temporal ETAS follows that baseline.
 
 ## Known technical risks and decisions still to verify
 

@@ -163,3 +163,47 @@ class EventDeclusteringClassification(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class SeismicityBackgroundRateRun(Base):
+    """Append-only smoothed background-rate run. Always cites the specific
+    SeismicityDeclusteringRun whose background subset it smoothed, and the
+    SpatialGrid (Phase 2) it was evaluated on.
+    """
+
+    __tablename__ = "seismicity_background_rate_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    declustering_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("seismicity_declustering_runs.id"), nullable=False
+    )
+    grid_id: Mapped[str] = mapped_column(ForeignKey("spatial_grids.id"), nullable=False)
+    k_nearest_neighbors: Mapped[int] = mapped_column(Integer, nullable=False)
+    minimum_bandwidth_km: Mapped[float] = mapped_column(Float, nullable=False)
+    observation_duration_days: Mapped[float] = mapped_column(Float, nullable=False)
+    background_event_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    method_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    calibration_status: Mapped[str] = mapped_column(String(64), nullable=False)
+    catalog_as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    diagnostics_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class SeismicCellBackgroundRate(Base):
+    """Append-only, one row per grid cell per background-rate run."""
+
+    __tablename__ = "seismic_cell_background_rates"
+    __table_args__ = (Index("ix_seismic_cell_background_rates_run", "background_rate_run_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    background_rate_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("seismicity_background_rate_runs.id"), nullable=False
+    )
+    cell_id: Mapped[str] = mapped_column(ForeignKey("seismic_cells.id"), nullable=False)
+    density_per_km2: Mapped[float] = mapped_column(Float, nullable=False)
+    rate_per_year: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )

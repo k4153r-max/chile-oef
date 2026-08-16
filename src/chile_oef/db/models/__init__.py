@@ -18,6 +18,8 @@ from chile_oef.db.models.seismicity import (
     CompletenessEstimate,
     EventDeclusteringClassification,
     GutenbergRichterEstimate,
+    SeismicCellBackgroundRate,
+    SeismicityBackgroundRateRun,
     SeismicityDeclusteringRun,
 )
 from chile_oef.db.models.tectonics import (
@@ -49,6 +51,8 @@ __all__ = [
     "IngestionRun",
     "RawArtifact",
     "SeismicCell",
+    "SeismicCellBackgroundRate",
+    "SeismicityBackgroundRateRun",
     "SeismicityDeclusteringRun",
     "SlabNode",
     "SourceEndpoint",
