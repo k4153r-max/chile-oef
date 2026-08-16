@@ -15,6 +15,11 @@ from chile_oef.db.session import SessionLocal
 from chile_oef.evaluation.replay import WalkForwardPolicy, run_walk_forward_evaluation
 from chile_oef.forecast.service import ForecastService
 from chile_oef.forecast.specification import load_forecast_specification
+from chile_oef.ingestion.historical_backfill import (
+    BackfillBounds,
+    BackfillPolicy,
+    run_usgs_historical_backfill,
+)
 from chile_oef.ingestion.raw_archive import RawArchive
 from chile_oef.ingestion.registry import load_source_registry
 from chile_oef.ingestion.service import IngestionService, sync_source_registry
@@ -214,6 +219,26 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     walk_forward.add_argument("--seed", type=int, default=0)
+
+    backfill = subparsers.add_parser(
+        "backfill-usgs-historical",
+        help=(
+            "resumable bulk USGS FDSN ingestion over a long time range, "
+            "auto-partitioned below the 20,000-result cap"
+        ),
+    )
+    backfill.add_argument("--start", type=_aware_datetime, required=True)
+    backfill.add_argument("--end", type=_aware_datetime, required=True)
+    backfill.add_argument("--min-magnitude", type=float)
+    backfill.add_argument("--min-latitude", type=float, default=-60.0)
+    backfill.add_argument("--max-latitude", type=float, default=-15.0)
+    backfill.add_argument("--min-longitude", type=float, default=-82.0)
+    backfill.add_argument("--max-longitude", type=float, default=-62.0)
+    backfill.add_argument("--max-results-per-slice", type=int, default=15_000)
+    backfill.add_argument("--min-slice-hours", type=float, default=6.0)
+    backfill.add_argument("--max-retries", type=int, default=3)
+    backfill.add_argument("--retry-backoff-seconds", type=float, default=2.0)
+    backfill.add_argument("--request-delay-seconds", type=float, default=1.0)
     return parser
 
 
@@ -518,6 +543,43 @@ def main() -> None:
             f"evaluation_run_id={evaluation_run.id} folds={evaluation_run.fold_count} "
             f"zero_observed_folds={evaluation_run.zero_observed_fold_count}"
         )
+        return
+    if args.command == "backfill-usgs-historical":
+        bounds = BackfillBounds(
+            min_latitude=args.min_latitude,
+            max_latitude=args.max_latitude,
+            min_longitude=args.min_longitude,
+            max_longitude=args.max_longitude,
+        )
+        policy = BackfillPolicy(
+            max_results_per_slice=args.max_results_per_slice,
+            min_slice=timedelta(hours=args.min_slice_hours),
+            max_retries=args.max_retries,
+            retry_backoff_seconds=args.retry_backoff_seconds,
+            request_delay_seconds=args.request_delay_seconds,
+        )
+        with SessionLocal() as session:
+            summary = asyncio.run(
+                run_usgs_historical_backfill(
+                    session,
+                    RawArchive(settings.raw_archive_path),
+                    start_time=args.start,
+                    end_time=args.end,
+                    bounds=bounds,
+                    min_magnitude=args.min_magnitude,
+                    timeout_seconds=settings.request_timeout_seconds,
+                    user_agent=settings.user_agent,
+                    policy=policy,
+                )
+            )
+        print(
+            f"slices={summary.total_slices} succeeded={summary.succeeded_slices} "
+            f"skipped={summary.skipped_already_done_slices} "
+            f"failed={len(summary.failed_slices)} events_seen={summary.total_events_seen} "
+            f"revisions_inserted={summary.total_revisions_inserted}"
+        )
+        for failed_start, failed_end, message in summary.failed_slices:
+            print(f"  FAILED {failed_start.isoformat()}..{failed_end.isoformat()}: {message}")
         return
     if args.command == "ingest-usgs-feed":
         adapter = UsgsGeoJsonAdapter(

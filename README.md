@@ -63,13 +63,19 @@ Phase 5 slice (IAS):
   gain per event, PR-AUC, ROC-AUC and threshold scores) plus the classic
   CSEP Number/Magnitude/Spatial/Likelihood consistency tests and
   time-block bootstrap uncertainty -- validated so far against synthetic
-  catalogs only; not yet run against real Chilean seismicity history (see
-  docs/PROJECT_STATE.md).
+  catalogs only;
+- a resumable, failure-isolated bulk historical USGS ingestion
+  (`chile-oef backfill-usgs-historical`), actually run this session: the
+  real USGS ComCat catalog for Chile, 1964-01-01 through 2026-08-16
+  (74,384 events, including the 27F Maule mainshock and its aftershock
+  sequence), is ingested and queryable.
 
-IAS's remaining components, real-world CSEP/pyCSEP walk-forward runs
-against actual historical seismicity, and ML are deliberately not
-implemented yet. The tectonic class uncertainty masses are not calibrated
-forecast probabilities.
+No seismicity/forecast/evaluation model has been re-run against that real
+catalog yet -- every fit to date used synthetic fixtures or the original
+2-event smoke test; that is the next step, not something this scope
+claims to have done. IAS's remaining components and ML are deliberately
+not implemented yet. The tectonic class uncertainty masses are not
+calibrated forecast probabilities.
 
 ## Local development
 

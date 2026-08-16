@@ -1,3 +1,4 @@
+from chile_oef.db.models.backfill import HistoricalBackfillSlice
 from chile_oef.db.models.catalog import (
     CanonicalEvent,
     CanonicalEventMembership,
@@ -57,6 +58,7 @@ __all__ = [
     "ForecastCellMagnitudeBin",
     "ForecastRun",
     "GutenbergRichterEstimate",
+    "HistoricalBackfillSlice",
     "IngestionArtifact",
     "IngestionRun",
     "ModifiedOmoriSequenceEstimate",

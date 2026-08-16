@@ -894,22 +894,98 @@ protocol's one explicitly prohibited primary score, is never computed.
 - Real-data honesty, not just a green test suite: this harness is
   validated here against a synthetic branching-process catalog (the same
   independently re-derived simulator used throughout Phase 3/4), the same
-  way every other estimator in this project was first validated. **It has
-  not yet been run against a genuine multi-decade Chilean seismicity
-  history.** Per Phase 1's own real-data smoke validation (see above),
-  only two real USGS events have actually been ingested into this
-  repository so far -- bulk historical ingestion (the CSN/USGS archive
-  pull needed for a real walk-forward run, and specifically for the 27F
-  Maule case study docs/backtesting.md describes, evaluated alongside
-  "hundreds or thousands of no-megathrust windows," never alone) is
-  separate, unscheduled future work. Claiming this evaluation harness
-  itself "validates the forecasts" would be honest; claiming it has
-  already validated them *against real Chilean seismicity* would not be.
+  way every other estimator in this project was first validated. At the
+  time this section was written, it had not yet been run against a
+  genuine multi-decade Chilean seismicity history -- see the "Bulk
+  historical USGS ingestion" section immediately below, added later the
+  same session, which closes the raw-data half of that gap. Running the
+  Mc/GR/declustering/ETAS/forecast pipeline itself against that real
+  catalog, and then re-running Phase 6 against it, is still explicit next
+  work, not done as part of this slice.
 
 Final gate on 2026-08-16: **145 tests passed** (115 prior + 29 new unit +
 1 new integration), full suite confirmed green end to end. Ruff, `ruff
 format --check`, and `alembic check` all passed. Migration `0014` applied
 cleanly against the real dev database.
+
+### Bulk historical USGS ingestion implemented, validated, and actually run
+
+Added on 2026-08-16, same session, in direct response to Phase 6's own
+"real-data honesty" gap above: only two real USGS events had ever been
+ingested into this repository (Phase 1's original smoke test). No
+walk-forward evaluation, and no 27F Maule case study specifically, can be
+honestly called prospective against real Chilean seismicity without a real
+historical catalog behind it.
+
+- `src/chile_oef/ingestion/historical_backfill.py::plan_time_partitions`:
+  a pure, injectable-count-function partitioner that recursively bisects a
+  time range until every leaf slice's real event count is at/below a
+  declared cap (default 15,000, below the FDSN service's real 20,000-
+  result limit, leaving headroom for events landing between a slice's
+  `count()` check and its `fetch()`). Verified with a synthetic event-
+  density model, independent of any real adapter: full coverage with no
+  gaps or overlaps, every leaf under the cap, adaptive finer partitioning
+  of a simulated dense sub-region versus a quiet one, and a hard refusal
+  (not silent truncation) if a slice still exceeds the cap at the
+  declared minimum granularity.
+- `run_usgs_historical_backfill` orchestrates this over the existing,
+  unmodified `UsgsFdsnAdapter` and `IngestionService` (no new ingestion
+  code path that could silently diverge from the one single-slice
+  ingestion already used and tested). Two properties a real multi-request
+  historical pull actually needs, both verified with a fake adapter
+  factory (no real network in the automated test suite): resumable (a
+  second run against the same range skips every slice already recorded
+  succeeded in the new `HistoricalBackfillSlice` table, verified by
+  running the orchestrator twice and confirming zero re-fetches and zero
+  duplicate `EventRevision` rows) and failure-isolated (a slice that fails
+  on every retry attempt is recorded failed and reported, without
+  aborting ingestion of every other slice in the run).
+- `db/models/backfill.py::HistoricalBackfillSlice` + Alembic migration
+  `0015`. Resumability is matched on source, exact time range, magnitude
+  floor and bounding box stored as real columns -- not by parsing
+  `IngestionRun.request_url` query strings, which would be fragile against
+  any change in how those parameters happen to get URL-encoded.
+- CLI: `chile-oef backfill-usgs-historical --start <iso8601> --end
+  <iso8601> [--min-magnitude <m>] [--min/max-latitude/longitude ...]`.
+- **Actually run against the live USGS API this session, not just
+  tested against fakes.** A one-month pilot (2024-06 through 2024-07, 85
+  events) was run first against the real service to prove the whole path
+  end to end, then re-run to confirm real resumability (second run:
+  `succeeded=0 skipped=1`). The full range USGS ComCat actually has for
+  Chile, `1964-01-01` through `2026-08-16` (this session's date), was then
+  backfilled for real: **9 slices, all succeeded, 0 failed, 74,384 events
+  seen, 74,297 new `EventRevision` rows inserted** (the small gap is
+  duplicate/boundary events the existing `revision_hash` dedup correctly
+  collapsed, not a bug in this new code). The real total volume turned out
+  far smaller than the "many hours, many thousands of requests" this
+  section originally worried about when scoping the work -- USGS ComCat's
+  own Chile-region catalog is on the order of 10^4-10^5 events, not larger,
+  because ComCat is materially less complete for small local events than
+  CSN's own denser regional network would be (a real, load-bearing
+  limitation to keep in mind for any Mc estimate run against this
+  ingested catalog: it inherits ComCat's own regional completeness, not
+  CSN's). The real Maule earthquake (2010-02-27 06:34 UTC, Mw 8.8, `mww`)
+  and its aftershock sequence are present and verified queryable in the
+  ingested catalog -- the 27F case study docs/backtesting.md names is now
+  actually possible to run, though nothing in this slice ran it yet.
+- Still not done: this backfill only used `usgs_comcat`
+  (`config/source-registry.yaml`'s one already-`enabled: true`,
+  already-legally-clear source). `csn_daily`, `csn_compiled_catalog`, and
+  `potin_1982_2020` remain `enabled: false` pending the license/contact
+  review `docs/data-sources.md` already requires -- none of them were
+  touched, silently enabled, or worked around. No Mc/Gutenberg-
+  Richter/declustering/ETAS/forecast/evaluation model has been re-run
+  against this real catalog yet; every scientific-slice validation to
+  date still refers to synthetic or 2-event smoke-test data. Raw content
+  is stored locally under `data/raw` (excluded from Git per
+  docs/data-governance.md's redistribution policy) and is not part of
+  this or any commit.
+
+Final gate on 2026-08-16: **7 new tests passed** (5 unit + 2 integration,
+on top of the 145 already passing), full suite (152 total) confirmed
+green. Ruff, `ruff format --check`, and `alembic check` all passed.
+Migration `0015` applied cleanly against the real dev database, which now
+also holds the real ingested catalog described above.
 
 ## Verified static data releases
 
@@ -997,15 +1073,21 @@ The following should be done next, in this order:
     the full config/evaluation-protocol.yaml score registry, the classic
     CSEP N/M/S/L consistency tests, and time-block bootstrap uncertainty,
     wired through `run_walk_forward_evaluation` and validated against a
-    synthetic catalog. **Not done next by default, but the load-bearing
-    gap to flag before anyone treats this project's forecasts as
-    validated**: none of this has been run against real Chilean
-    seismicity yet. Bulk historical catalog ingestion (the CSN/USGS
-    archive pull spanning decades, not the two-event Phase 1 smoke test)
-    is a prerequisite for the 27F Maule case study and the "hundreds or
+    synthetic catalog.
+11. ~~Bulk historical USGS ingestion~~ -- done 2026-08-16 (see "Bulk
+    historical USGS ingestion" section above): 74,384 real events,
+    1964-01-01 through 2026-08-16, actually ingested from the live USGS
+    API, including the 27F Maule mainshock and aftershock sequence. **Next
+    by default now**: run the Mc / Gutenberg-Richter / declustering /
+    background-rate / ETAS / forecast pipeline against this real catalog
+    for the first time (every fit to date has used synthetic fixtures or
+    the original 2-event smoke test), then re-run Phase 6 against those
+    real fits -- only then can the 27F case study and the "hundreds or
     thousands of no-megathrust windows" docs/backtesting.md requires
-    alongside it -- unscheduled, separate future work, not something this
-    slice attempted or should be read as having done.
+    alongside it actually be attempted. `csn_daily`,
+    `csn_compiled_catalog` and `potin_1982_2020` remain deliberately
+    `enabled: false` pending the license/contact review
+    docs/data-sources.md requires -- not silently worked around.
 
 ## Known technical risks and decisions still to verify
 
