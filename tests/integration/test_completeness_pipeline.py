@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -9,6 +10,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from chile_oef.catalog.normalization import NormalizedEvent
+from chile_oef.db.models import CompletenessEstimate
 from chile_oef.ingestion.base import FetchedArtifact
 from chile_oef.ingestion.raw_archive import RawArchive
 from chile_oef.ingestion.registry import load_source_registry
@@ -397,3 +399,80 @@ async def test_gutenberg_richter_refuses_a_completeness_estimate_without_mc(
             GutenbergRichterEstimationService(session).estimate_for_completeness_estimate(
                 mc_record.id
             )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_gutenberg_richter_excludes_late_arriving_revision_above_mc(
+    postgis_engine: Engine,
+    tmp_path: Path,
+) -> None:
+    """Walk-forward guard for Gutenberg-Richter specifically: a large event
+    above Mc whose available_at is after catalog_as_of must not enter the
+    b-value fit, even though b is computed from a catalog re-fetched
+    independently of the Mc estimation step.
+    """
+    window_start = datetime(2026, 1, 1, tzinfo=UTC)
+    window_end = window_start + timedelta(days=60)
+    as_of = window_start + timedelta(days=30)
+
+    on_time = [
+        _event(
+            source_event_id=f"gr-avail-{index}",
+            event_time=window_start + timedelta(hours=index),
+            available_at=window_start + timedelta(hours=index, minutes=5),
+            magnitude=3.0,
+        )
+        for index in range(200)
+    ]
+    late_arriving_large_event = _event(
+        source_event_id="gr-avail-late",
+        event_time=window_start + timedelta(days=1),
+        available_at=as_of + timedelta(days=5),
+        magnitude=7.5,
+    )
+
+    with Session(postgis_engine, expire_on_commit=False) as session:
+        sync_source_registry(
+            session,
+            load_source_registry(Path("config/source-registry.yaml")),
+        )
+        await IngestionService(session, RawArchive(tmp_path / "raw")).run(
+            FixtureEventAdapter([*on_time, late_arriving_large_event])
+        )
+
+        # Construct the completeness estimate directly with a known mc_value
+        # comfortably below the on-time magnitudes, rather than deriving it
+        # from an estimator whose exact numeric output (e.g. Maximum
+        # Curvature's +0.2 correction) is not the property this test is
+        # checking.
+        mc_record = CompletenessEstimate(
+            start_time=window_start,
+            end_time=window_end,
+            magnitude_type="ml",
+            method_version="fixture",
+            role="diagnostic",
+            calibration_status="fixture",
+            event_count=201,
+            support_state="supported",
+            mc_value=2.5,
+            bin_width_magnitude=0.1,
+            catalog_as_of=as_of,
+            diagnostics_json={},
+        )
+        session.add(mc_record)
+        session.commit()
+
+        gr_record = GutenbergRichterEstimationService(session).estimate_for_completeness_estimate(
+            mc_record.id
+        )
+
+        # The magnitude-7.5 event is far above Mc and would dominate the
+        # mean-magnitude term (and therefore b) if it leaked in.
+        assert gr_record.event_count == 200
+        assert gr_record.events_at_or_above_mc == 200
+        assert gr_record.catalog_as_of == as_of
+        # event_count/events_at_or_above_mc == 200 (not 201) is the real
+        # assertion: the magnitude-7.5 outlier, which would otherwise pull
+        # the mean magnitude up and collapse b, never entered the fit.
+        assert gr_record.b_value == pytest.approx(math.log10(math.e) / 0.55)
