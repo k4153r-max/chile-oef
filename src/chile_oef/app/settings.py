@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     tectonic_classifier_path: Path = Path("config/tectonic-classifier.yaml")
     completeness_policy_path: Path = Path("config/completeness-policy.yaml")
     forecast_specification_path: Path = Path("config/forecast-specification.yaml")
+    evaluation_protocol_path: Path = Path("config/evaluation-protocol.yaml")
     api_prefix: str = "/v1"
     log_level: str = "INFO"
     request_timeout_seconds: float = Field(default=30.0, gt=0)

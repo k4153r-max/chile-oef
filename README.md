@@ -54,12 +54,22 @@ Phase 5 slice (IAS):
   versioned grid-cell x magnitude-bin forecasts from an already-fit
   spatiotemporal ETAS model and Gutenberg-Richter b-value, over the
   horizons and magnitude bins already registered in
-  config/forecast-specification.yaml.
+  config/forecast-specification.yaml;
+- walk-forward CSEP-style evaluation (docs/backtesting.md,
+  config/evaluation-protocol.yaml): issues and scores real forecast runs
+  across a historical window against what was actually observed, with the
+  full registered score set (log loss, Brier score, reliability,
+  point-process log-likelihood, deviance, predictive coverage, information
+  gain per event, PR-AUC, ROC-AUC and threshold scores) plus the classic
+  CSEP Number/Magnitude/Spatial/Likelihood consistency tests and
+  time-block bootstrap uncertainty -- validated so far against synthetic
+  catalogs only; not yet run against real Chilean seismicity history (see
+  docs/PROJECT_STATE.md).
 
-CSEP/pyCSEP evaluation, IAS's remaining components, and ML are deliberately
-not implemented
-yet. The tectonic class uncertainty masses are not calibrated forecast
-probabilities.
+IAS's remaining components, real-world CSEP/pyCSEP walk-forward runs
+against actual historical seismicity, and ML are deliberately not
+implemented yet. The tectonic class uncertainty masses are not calibrated
+forecast probabilities.
 
 ## Local development
 

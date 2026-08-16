@@ -1,16 +1,18 @@
 import argparse
 import asyncio
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
+import numpy as np
 from sqlalchemy import func, select
 
 from chile_oef.app.settings import get_settings
 from chile_oef.datasets.service import DatasetVersionService
 from chile_oef.db.models import FaultTrace, SlabNode
 from chile_oef.db.session import SessionLocal
+from chile_oef.evaluation.replay import WalkForwardPolicy, run_walk_forward_evaluation
 from chile_oef.forecast.service import ForecastService
 from chile_oef.forecast.specification import load_forecast_specification
 from chile_oef.ingestion.raw_archive import RawArchive
@@ -178,6 +180,40 @@ def build_parser() -> argparse.ArgumentParser:
     forecast.add_argument("--horizon-id", required=True, help="e.g. PT6H, P1D, P3D, P7D")
     forecast.add_argument("--trigger-type", default="scheduled")
     forecast.add_argument("--supersedes-forecast-run-id", type=uuid.UUID)
+
+    walk_forward = subparsers.add_parser(
+        "run-walk-forward-evaluation",
+        help=(
+            "walk-forward CSEP-style evaluation (docs/backtesting.md): issue and "
+            "score one forecast per issue time across a historical window"
+        ),
+    )
+    walk_forward.add_argument("--spatiotemporal-etas-estimate-id", type=uuid.UUID, required=True)
+    walk_forward.add_argument("--gutenberg-richter-estimate-id", type=uuid.UUID, required=True)
+    walk_forward.add_argument("--walk-forward-start", type=_aware_datetime, required=True)
+    walk_forward.add_argument("--walk-forward-end", type=_aware_datetime, required=True)
+    walk_forward.add_argument("--step-seconds", type=float, required=True)
+    walk_forward.add_argument("--horizon-id", required=True, help="e.g. PT6H, P1D, P3D, P7D")
+    walk_forward.add_argument(
+        "--adjudication-delay-seconds",
+        type=float,
+        required=True,
+        help="catalog-maturation embargo added after each fold's validity_end before scoring",
+    )
+    walk_forward.add_argument("--n-simulations", type=int, default=1000)
+    walk_forward.add_argument("--csep-alpha", type=float, default=0.05)
+    walk_forward.add_argument("--bootstrap-resamples", type=int, default=2000)
+    walk_forward.add_argument("--bootstrap-confidence-level", type=float, default=0.90)
+    walk_forward.add_argument(
+        "--decision-threshold",
+        type=float,
+        action="append",
+        dest="decision_thresholds",
+        help=(
+            "repeatable; a declared probability threshold for precision/recall/f1/false_alarm_rate"
+        ),
+    )
+    walk_forward.add_argument("--seed", type=int, default=0)
     return parser
 
 
@@ -455,6 +491,32 @@ def main() -> None:
         print(
             f"forecast_run_id={run.id} cells={run.cell_count} bins={run.magnitude_bin_count} "
             f"validity_start={run.validity_start} validity_end={run.validity_end}"
+        )
+        return
+    if args.command == "run-walk-forward-evaluation":
+        with SessionLocal() as session:
+            evaluation_run = run_walk_forward_evaluation(
+                session,
+                specification=load_forecast_specification(settings.forecast_specification_path),
+                spatiotemporal_etas_estimate_id=args.spatiotemporal_etas_estimate_id,
+                gutenberg_richter_estimate_id=args.gutenberg_richter_estimate_id,
+                walk_forward_start=args.walk_forward_start,
+                walk_forward_end=args.walk_forward_end,
+                step=timedelta(seconds=args.step_seconds),
+                horizon_id=args.horizon_id,
+                adjudication_delay=timedelta(seconds=args.adjudication_delay_seconds),
+                rng=np.random.default_rng(args.seed),
+                policy=WalkForwardPolicy(
+                    n_simulations=args.n_simulations,
+                    csep_alpha=args.csep_alpha,
+                    bootstrap_resamples=args.bootstrap_resamples,
+                    bootstrap_confidence_level=args.bootstrap_confidence_level,
+                    decision_thresholds=tuple(args.decision_thresholds or ()),
+                ),
+            )
+        print(
+            f"evaluation_run_id={evaluation_run.id} folds={evaluation_run.fold_count} "
+            f"zero_observed_folds={evaluation_run.zero_observed_fold_count}"
         )
         return
     if args.command == "ingest-usgs-feed":

@@ -1,4 +1,5 @@
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
@@ -14,10 +15,42 @@ from chile_oef.db.models import (
     SpatiotemporalEtasEstimate,
 )
 from chile_oef.forecast.generation import ForecastGenerationPolicy, generate_forecast_cells
-from chile_oef.forecast.specification import ForecastSpecification
+from chile_oef.forecast.specification import ForecastSpecification, MagnitudeBin
 from chile_oef.seismicity.background_rate import GridCellTarget
 from chile_oef.seismicity.catalog_selection import fetch_declustering_catalog
 from chile_oef.seismicity.spatiotemporal_etas import SpatiotemporalEtasParameters
+
+
+@dataclass(frozen=True)
+class GenerationInputs:
+    """Everything `generate_forecast_cells` needs, assembled once from a
+    specific spatiotemporal ETAS estimate, Gutenberg-Richter estimate and
+    issue time. Shared between `ForecastService.issue_forecast` (which
+    persists a real `ForecastRun`) and evaluation code that needs the same
+    prior-catalog/cell inputs to score an alternative, non-persisted
+    reference model (e.g. a homogeneous-Poisson baseline for information
+    gain) without duplicating the catalog-fetch and lineage-consistency
+    logic.
+    """
+
+    completeness_source: CompletenessEstimate
+    etas_source: SpatiotemporalEtasEstimate
+    gr_source: GutenbergRichterEstimate
+    grid: SpatialGrid
+    cell_targets: tuple[GridCellTarget, ...]
+    magnitude_bins: tuple[MagnitudeBin, ...]
+    etas_parameters: SpatiotemporalEtasParameters
+    b_value: float
+    reference_magnitude: float
+    region_area_km2: float
+    validity_start: datetime
+    validity_end: datetime
+    validity_start_days: float
+    validity_end_days: float
+    prior_event_times_days: tuple[float, ...]
+    prior_event_latitudes: tuple[float, ...]
+    prior_event_longitudes: tuple[float, ...]
+    prior_event_magnitudes: tuple[float, ...]
 
 
 class ForecastService:
@@ -32,16 +65,22 @@ class ForecastService:
         self.specification = specification
         self.policy = policy or ForecastGenerationPolicy()
 
-    def issue_forecast(
+    def prepare_generation_inputs(
         self,
         *,
         spatiotemporal_etas_estimate_id: uuid.UUID,
         gutenberg_richter_estimate_id: uuid.UUID,
         issued_at: datetime,
         horizon_id: str,
-        trigger_type: str = "scheduled",
-        supersedes_forecast_run_id: uuid.UUID | None = None,
-    ) -> ForecastRun:
+    ) -> GenerationInputs:
+        """Resolve and validate the ETAS/Gutenberg-Richter/completeness
+        lineage, fetch the availability-safe prior catalog as of
+        `issued_at`, and assemble everything `generate_forecast_cells`
+        needs. Raises the same `ValueError`s `issue_forecast` always has:
+        unknown estimate ids, non-convergent source estimates, or a
+        Gutenberg-Richter estimate that does not share the ETAS estimate's
+        completeness (Mc/window) lineage.
+        """
         """Issue one forecast (docs/forecast-contract.md): grid-cell x
         magnitude-bin rates and probabilities over [issued_at,
         issued_at + horizon), from a specific already-fit spatiotemporal
@@ -56,10 +95,6 @@ class ForecastService:
         Mc/b/ETAS estimates were originally fit on -- the model/parameter
         -set version and the input catalog snapshot are versioned
         independently, per forecast-contract.md.
-
-        A recalculation is a new call with `supersedes_forecast_run_id` set
-        to the run it replaces; published rows are never updated or
-        deleted (docs/forecast-contract.md immutability).
         """
         etas_source = self.session.get(SpatiotemporalEtasEstimate, spatiotemporal_etas_estimate_id)
         if etas_source is None:
@@ -156,21 +191,74 @@ class ForecastService:
             validity_end - completeness_source.start_time
         ).total_seconds() / 86400.0
 
-        result = generate_forecast_cells(
-            prior_event_times_days=prior_times_days,
-            prior_event_latitudes=prior_lats,
-            prior_event_longitudes=prior_lons,
-            prior_event_magnitudes=prior_mags,
+        return GenerationInputs(
+            completeness_source=completeness_source,
+            etas_source=etas_source,
+            gr_source=gr_source,
+            grid=grid,
+            cell_targets=tuple(cell_targets),
+            magnitude_bins=self.specification.magnitude_bins,
             etas_parameters=etas_parameters,
             b_value=gr_source.b_value,
             reference_magnitude=completeness_source.mc_value,
             region_area_km2=etas_source.region_area_km2,
+            validity_start=validity_start,
+            validity_end=validity_end,
             validity_start_days=validity_start_days,
             validity_end_days=validity_end_days,
-            cells=cell_targets,
-            magnitude_bins=self.specification.magnitude_bins,
+            prior_event_times_days=tuple(prior_times_days),
+            prior_event_latitudes=tuple(prior_lats),
+            prior_event_longitudes=tuple(prior_lons),
+            prior_event_magnitudes=tuple(prior_mags),
+        )
+
+    def issue_forecast(
+        self,
+        *,
+        spatiotemporal_etas_estimate_id: uuid.UUID,
+        gutenberg_richter_estimate_id: uuid.UUID,
+        issued_at: datetime,
+        horizon_id: str,
+        trigger_type: str = "scheduled",
+        supersedes_forecast_run_id: uuid.UUID | None = None,
+    ) -> ForecastRun:
+        """Issue and persist one forecast (docs/forecast-contract.md). See
+        `prepare_generation_inputs` for the lineage/availability rules this
+        applies. A recalculation is a new call with
+        `supersedes_forecast_run_id` set to the run it replaces; published
+        rows are never updated or deleted (forecast-contract.md
+        immutability).
+        """
+        inputs = self.prepare_generation_inputs(
+            spatiotemporal_etas_estimate_id=spatiotemporal_etas_estimate_id,
+            gutenberg_richter_estimate_id=gutenberg_richter_estimate_id,
+            issued_at=issued_at,
+            horizon_id=horizon_id,
+        )
+
+        result = generate_forecast_cells(
+            prior_event_times_days=inputs.prior_event_times_days,
+            prior_event_latitudes=inputs.prior_event_latitudes,
+            prior_event_longitudes=inputs.prior_event_longitudes,
+            prior_event_magnitudes=inputs.prior_event_magnitudes,
+            etas_parameters=inputs.etas_parameters,
+            b_value=inputs.b_value,
+            reference_magnitude=inputs.reference_magnitude,
+            region_area_km2=inputs.region_area_km2,
+            validity_start_days=inputs.validity_start_days,
+            validity_end_days=inputs.validity_end_days,
+            cells=inputs.cell_targets,
+            magnitude_bins=inputs.magnitude_bins,
             policy=self.policy,
         )
+
+        etas_source = inputs.etas_source
+        gr_source = inputs.gr_source
+        grid = inputs.grid
+        cell_targets = inputs.cell_targets
+        completeness_source = inputs.completeness_source
+        validity_start = inputs.validity_start
+        validity_end = inputs.validity_end
 
         run = ForecastRun(
             spatiotemporal_etas_estimate_id=etas_source.id,

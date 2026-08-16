@@ -790,15 +790,126 @@ format --check`, and `alembic check` all passed. Migration `0013` applied
 cleanly against the real dev database.
 
 Still not done for seismicity/forecasting: no public API endpoint for any
-of these eleven models or the new forecast layer -- everything is
-CLI/service-only. Per docs/scientific-methodology.md's progression,
-CSEP/pyCSEP evaluation and walk-forward replay (Phase 6) is next, now with
-an actual `ForecastRun` artifact to score -- which, per this file's own
-"Definition of done," cannot be honestly claimed as validated without
-genuine prospective/backtest evaluation, not just unit tests. The remaining
-IAS components (energy-proxy residual, spatial concentration, persistence,
-depth migration) and network-epoch awareness remain explicit future work,
-not silently implemented elsewhere.
+of these eleven models or the forecast layer -- everything is
+CLI/service-only. The remaining IAS components (energy-proxy residual,
+spatial concentration, persistence, depth migration) and network-epoch
+awareness remain explicit future work, not silently implemented elsewhere.
+
+### Phase 6 implemented and validated: walk-forward CSEP-style evaluation
+
+Added on 2026-08-16, same session, immediately after the forecast
+generation layer it scores. Implements every score name registered in
+`config/evaluation-protocol.yaml` (binary: `log_loss`, `brier_score`,
+`reliability`; count: `point_process_log_likelihood`, `deviance`,
+`predictive_coverage`; spatial: `information_gain_per_event`,
+`csep_spatial_test`; rare-event: `pr_auc`, `recall`, `false_alarm_rate`;
+secondary: `roc_auc`, `precision`, `f1`) plus the classic CSEP consistency
+battery (Zechar, Schorlemmer, Liukis, Yu, Euler, Werner & Jordan 2010):
+Number, Magnitude, Spatial and joint Likelihood tests. `accuracy`, the
+protocol's one explicitly prohibited primary score, is never computed.
+
+- `src/chile_oef/evaluation/scoring.py`: pure scoring functions. Every
+  function returns `None` (never a fabricated number) when a score is
+  mathematically undefined for the given fold -- no positives for
+  `pr_auc`/recall, no negatives for `roc_auc`/`false_alarm_rate`, zero
+  observed events for `information_gain_per_event` -- the same
+  `not_estimable` discipline used everywhere else in this project.
+  Reliability is binned by predicted-probability *quantile*, not equal
+  width: per-cell earthquake probabilities are typically 1e-6 to 1e-2, so
+  equal-width bins over `[0, 1]` would leave every bin but the first
+  empty. `predictive_coverage` is documented as systematically
+  conservative (>= its nominal level) for discrete counts, not
+  miscalibrated -- a real property of equal-tailed Poisson intervals, not
+  a bug, caught while writing its own verification test.
+- `src/chile_oef/evaluation/csep_tests.py`: the N-test is evaluated
+  analytically (the sum of independent Poisson variables is itself
+  Poisson, no simulation needed). The M-test and S-test share one
+  machinery: conditioning independent Poisson counts on their known total
+  is *exactly* a multinomial distribution over the normalized rates (not
+  an approximation) -- verified independently by brute-force rejection
+  sampling from the underlying Poissons, compared against
+  `numpy.random.Generator.multinomial`. The L-test simulates full
+  (unnormalized) catalogs from the forecast rates.
+- Verification methodology matches every other estimator this session: the
+  flagship check is that under the null hypothesis (observed data really
+  drawn from the forecast), each simulation-based test's reported quantile
+  is uniformly distributed on `[0, 1]` -- the defining property of a valid
+  probability-integral-transform test statistic, checked over 250
+  independent trials for the L-test and S-test, independent of anything in
+  their own implementation. Separately, each test is checked to correctly
+  detect a grossly wrong forecast (quantile near 0, `consistent_at_alpha`
+  False) on deliberately mismatched synthetic cases.
+- `src/chile_oef/evaluation/replay.py::run_walk_forward_evaluation`:
+  issues one real, persisted `ForecastRun` per issue time across
+  `[walk_forward_start, walk_forward_end)` via the *same*
+  `ForecastService.issue_forecast` every other forecast uses (no
+  evaluation-only code path that could silently diverge from what
+  actually gets issued), scored against events actually observed once the
+  catalog has had `adjudication_delay` to mature
+  (docs/backtesting.md: "adjudicated evaluation occurs after the
+  registered catalog-maturation delay"). `information_gain_per_event`
+  compares the model forecast to a homogeneous-Poisson reference
+  (the same fitted spatiotemporal ETAS parameters with `k0` forced to 0,
+  background only, computed but never persisted as a `ForecastRun`) --
+  this reference is exactly stage 1 of
+  docs/scientific-methodology.md's scientific progression ("Empirical
+  base-rate and homogeneous Poisson"), which had never existed as its own
+  artifact until this comparison needed one.
+- Point-to-cell assignment (`_cell_id_for_point`) is analytic, matching
+  `chile_oef.tectonics.grid.iter_cells`'s deterministic id scheme exactly,
+  rather than a spatial query -- correct by construction for any regular
+  grid built by `GridService`, with no separate id-matching logic to drift
+  out of sync.
+- `ForecastService` was refactored (no behavior change; the full existing
+  forecast-layer test suite still passes unmodified) to expose
+  `prepare_generation_inputs` as its own method, separating "resolve
+  lineage + fetch the availability-safe prior catalog" from "generate and
+  persist" -- the walk-forward harness reuses it to build the homogeneous-
+  Poisson reference model without duplicating the catalog-fetch and
+  lineage-consistency logic `issue_forecast` already has.
+- Block-bootstrap uncertainty (`config/evaluation-protocol.yaml`:
+  `resampling: {method: block_bootstrap, blocks: [time, earthquake_sequence]}`):
+  each walk-forward fold is already one non-overlapping time block by
+  construction (the embargo/step design), so resampling folds with
+  replacement *is* the registered "time" block bootstrap -- no separate
+  block-partitioning step was needed. "earthquake_sequence"-block
+  resampling is explicitly **not implemented** (documented in every
+  `EvaluationRun.diagnostics_json`, not silently dropped) -- it would
+  require grouping the evaluation catalog by declustering family across
+  the whole run, a materially larger piece of scope deferred rather than
+  half-built.
+- `db/models/evaluation.py::EvaluationRun` (append-only; one row per
+  walk-forward execution, mandatory FKs to the specific
+  `SpatiotemporalEtasEstimate` and `GutenbergRichterEstimate` under test
+  and the `SpatialGrid` used; `aggregate_scores_json` holds the
+  bootstrapped point estimate + CI per scalar score, plus per-CSEP-test
+  fraction-consistent-at-alpha summaries) and `EvaluationFoldScore`
+  (append-only; one row per issue time, mandatory FK to the exact
+  `ForecastRun` it scored, `scores_json` holding every per-fold scalar and
+  CSEP test result) + Alembic migration `0014`. CLI:
+  `chile-oef run-walk-forward-evaluation --spatiotemporal-etas-estimate-id
+  <uuid> --gutenberg-richter-estimate-id <uuid> --walk-forward-start
+  <iso8601> --walk-forward-end <iso8601> --step-seconds <n> --horizon-id
+  <PT6H|P1D|P3D|P7D> --adjudication-delay-seconds <n>`.
+- Real-data honesty, not just a green test suite: this harness is
+  validated here against a synthetic branching-process catalog (the same
+  independently re-derived simulator used throughout Phase 3/4), the same
+  way every other estimator in this project was first validated. **It has
+  not yet been run against a genuine multi-decade Chilean seismicity
+  history.** Per Phase 1's own real-data smoke validation (see above),
+  only two real USGS events have actually been ingested into this
+  repository so far -- bulk historical ingestion (the CSN/USGS archive
+  pull needed for a real walk-forward run, and specifically for the 27F
+  Maule case study docs/backtesting.md describes, evaluated alongside
+  "hundreds or thousands of no-megathrust windows," never alone) is
+  separate, unscheduled future work. Claiming this evaluation harness
+  itself "validates the forecasts" would be honest; claiming it has
+  already validated them *against real Chilean seismicity* would not be.
+
+Final gate on 2026-08-16: **145 tests passed** (115 prior + 29 new unit +
+1 new integration), full suite confirmed green end to end. Ruff, `ruff
+format --check`, and `alembic check` all passed. Migration `0014` applied
+cleanly against the real dev database.
 
 ## Verified static data releases
 
@@ -877,15 +988,24 @@ The following should be done next, in this order:
 9. ~~Forecast generation layer~~ — done 2026-08-16 (see "Forecast
    generation layer implemented and validated" section above). A real gap
    found while scoping Phase 6: nothing previously produced a
-   forecast-contract.md-shaped `ForecastRun`. Next per
-   docs/scientific-methodology.md's progression: CSEP/pyCSEP evaluation and
-   walk-forward replay (Phase 6), now with an actual artifact to score --
-   forecasts cannot be honestly claimed as validated before that gate, and
-   per this file's "Definition of done," genuine prospective/backtest
-   evaluation is required, not just unit tests. Remaining forecast-layer
+   forecast-contract.md-shaped `ForecastRun`. Remaining forecast-layer
    gaps (parameter-uncertainty propagation, tectonic-class/depth
    conditioning, spatially-varying background) are explicit future work,
    not scheduled next by default.
+10. ~~CSEP/pyCSEP evaluation and walk-forward replay (Phase 6)~~ -- done
+    2026-08-16 (see "Phase 6 implemented and validated" section above):
+    the full config/evaluation-protocol.yaml score registry, the classic
+    CSEP N/M/S/L consistency tests, and time-block bootstrap uncertainty,
+    wired through `run_walk_forward_evaluation` and validated against a
+    synthetic catalog. **Not done next by default, but the load-bearing
+    gap to flag before anyone treats this project's forecasts as
+    validated**: none of this has been run against real Chilean
+    seismicity yet. Bulk historical catalog ingestion (the CSN/USGS
+    archive pull spanning decades, not the two-event Phase 1 smoke test)
+    is a prerequisite for the 27F Maule case study and the "hundreds or
+    thousands of no-megathrust windows" docs/backtesting.md requires
+    alongside it -- unscheduled, separate future work, not something this
+    slice attempted or should be read as having done.
 
 ## Known technical risks and decisions still to verify
 
