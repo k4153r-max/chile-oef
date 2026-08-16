@@ -39,9 +39,11 @@ completeness slice:
   2007) over a declustering run's background subset, evaluated on a Phase 2
   grid;
 - Modified Omori-Utsu aftershock sequence fits (Ogata 1983) over each
-  triggered family a declustering run identifies.
+  triggered family a declustering run identifies;
+- temporal ETAS (Ogata 1988), a joint 5-parameter maximum-likelihood fit
+  over the entire catalog above a declared Mc.
 
-ETAS, IAS and ML are deliberately not implemented
+Spatiotemporal ETAS, IAS and ML are deliberately not implemented
 yet. The tectonic class uncertainty masses are not calibrated forecast
 probabilities.
 

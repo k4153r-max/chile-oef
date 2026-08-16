@@ -24,6 +24,7 @@ from chile_oef.seismicity.service import (
     DeclusteringService,
     GutenbergRichterEstimationService,
     ModifiedOmoriService,
+    TemporalEtasService,
 )
 from chile_oef.tectonics.assets import TectonicAssetService
 from chile_oef.tectonics.classification import load_classification_parameters
@@ -133,6 +134,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="fit Modified Omori-Utsu sequences for every aftershock family in a declustering run",
     )
     omori.add_argument("--declustering-run-id", type=uuid.UUID, required=True)
+
+    etas = subparsers.add_parser(
+        "fit-temporal-etas",
+        help="fit temporal ETAS above a completeness estimate's Mc",
+    )
+    etas.add_argument("--completeness-estimate-id", type=uuid.UUID, required=True)
+    etas.add_argument(
+        "--declustering-run-id",
+        type=uuid.UUID,
+        help="optional: seed the optimizer from this run's Modified Omori families",
+    )
     return parser
 
 
@@ -354,6 +366,19 @@ def main() -> None:
             )
         estimable = [record for record in records if record.support_state == "estimable"]
         print(f"families={len(records)} estimable={len(estimable)}")
+        return
+    if args.command == "fit-temporal-etas":
+        with SessionLocal() as session:
+            record = TemporalEtasService(session).estimate_for_completeness_estimate(
+                args.completeness_estimate_id,
+                declustering_run_id=args.declustering_run_id,
+            )
+        print(
+            f"event_count={record.event_count} support_state={record.support_state} "
+            f"converged={record.converged} restarts_converged={record.restarts_converged} "
+            f"mu={record.mu_per_day} k0={record.k0} alpha={record.alpha} "
+            f"c={record.c_days} p={record.p_exponent}"
+        )
         return
     if args.command == "ingest-usgs-feed":
         adapter = UsgsGeoJsonAdapter(

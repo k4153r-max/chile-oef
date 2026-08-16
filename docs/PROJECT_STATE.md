@@ -504,11 +504,74 @@ tests passed** (85 prior + 6 new), Ruff, `ruff format --check`, and
 `alembic check` all passed. Migration `0009` applied cleanly against the
 real dev database.
 
+### Phase 4 started — temporal ETAS implemented and validated
+
+Added on 2026-08-16, same session. First Phase 4 model
+(docs/scientific-methodology.md item 5: "Temporal, then spatiotemporal,
+ETAS"). Genuinely harder than everything in Phase 3: a 5-parameter joint
+MLE over the *entire* catalog at once (not per-family like Modified Omori),
+with an O(n^2) likelihood.
+
+- `src/chile_oef/seismicity/etas.py::estimate_temporal_etas`: Ogata (1988)
+  conditional intensity `lambda(t) = mu + sum_{t_j<t} k0*exp(alpha*(m_j-mc))/(t-t_j+c)^p`,
+  fit by maximum likelihood (`sum(log(lambda(t_i))) - integral(lambda) dt`
+  over the observation window). No hard parent/family assignment is used or
+  needed -- every earlier event contributes to every later event's rate,
+  unlike declustering's nearest-neighbor parent links.
+- Fit with several restarts from different starting points (default: one
+  seeded from a crude background-rate-style guess, the rest random within
+  bounds; `TemporalEtasService` instead seeds from a declustering run's
+  averaged Modified Omori `(K, c, p)` when one is supplied, per this file's
+  own earlier guidance) and keeps the best (highest-likelihood) converged
+  result. Each restart tries `L-BFGS-B` first, falling back to Nelder-Mead
+  on failure (same pattern established for Modified Omori).
+- A real, literature-documented ETAS estimation characteristic was
+  encountered and is explicitly handled, not hidden: with modest triggered-
+  event counts, `k0`/`alpha`/`c` are weakly identified and can converge to
+  parameter-bound boundaries (`alpha=0`, `p=3` were both observed during
+  development on smaller synthetic catalogs). This is not a bug in the
+  implementation -- it is why the restart strategy and the "not just a
+  local optimum" framing exist, and why `TemporalEtasEstimate.support_state`
+  can legitimately be `"estimable"` with parameters that are only loosely
+  constrained; downstream consumers must not treat a converged ETAS fit as
+  automatically precise.
+- Verified against a from-scratch branching-process (Hawkes) simulation of
+  the *exact* model being fit (background immigrants + self-exciting
+  offspring generated only within the finite observation window, matching
+  the likelihood's own truncation) -- the only reliable way to validate an
+  ETAS MLE, per the literature. At `mu=1.0, k0=0.043, alpha=1.0, c=0.1,
+  p=1.2` over 300 days (506 events, seed-fixed and fully reproducible),
+  recovered `mu=1.20, k0=0.028, alpha=0.81, c=0.072, p=1.238` -- correct
+  order of magnitude and sign on every parameter, with `mu` and `p` (the
+  best-identified) recovered more precisely than `k0`/`alpha`/`c`
+  (expected, and reflected in the committed test's per-parameter
+  tolerances, not papered over with one loose blanket tolerance).
+- `db/models/seismicity.py::TemporalEtasEstimate` (append-only, mandatory FK
+  to `CompletenessEstimate`, optional FK to the `ModifiedOmoriSequenceEstimate`
+  that seeded its initial guess when one was used) + Alembic migration
+  `0010`. `TemporalEtasService.estimate_for_completeness_estimate` takes a
+  `completeness_estimate_id` (required) and `declustering_run_id`
+  (optional, seeds the starting point only -- ETAS does not require
+  declustering to run). CLI:
+  `chile-oef fit-temporal-etas --completeness-estimate-id <uuid> [--declustering-run-id <uuid>]`.
+- Known limitation, not yet addressed: the O(n^2) likelihood means fitting
+  time grows quadratically with catalog size (500 events with a handful of
+  restarts already takes tens of seconds); documented the same way as
+  declustering's and the background rate's known O(n^2)/O(n*m) scaling
+  notes -- fine at current catalog scale, a real optimization target before
+  this is used on a large real catalog.
+
+Final gate on 2026-08-16: **96 tests passed** (91 prior + 5 new), Ruff,
+`ruff format --check`, and `alembic check` all passed. Migration `0010`
+applied cleanly against the real dev database. Full suite runtime is now
+~117 seconds, up from ~80s before this addition, driven almost entirely by
+the ETAS synthetic-recovery test's restart cost -- worth watching as more
+slices are added, though not yet a problem.
+
 Still not done for seismicity: no forecast, no public API endpoint for any
-of these six models -- everything so far is CLI/service-only. Temporal
-ETAS (docs/scientific-methodology.md's next progression step) is not
-implemented; per the roadmap, it should build on the background rate and
-Modified Omori baselines now in place, not skip them.
+of these seven models. Spatiotemporal ETAS
+(docs/scientific-methodology.md's next progression step after temporal
+ETAS) is not implemented.
 
 ## Verified static data releases
 
@@ -572,17 +635,15 @@ The following should be done next, in this order:
    have a dedicated late-arriving-revision walk-forward case.
 6. ~~Declustered background, smoothed background rate, and Modified
    Omori~~ — all done 2026-08-16 (see Phase 3 continued sections above).
-7. Temporal ETAS is the next real step. It should build on, not bypass, the
-   baselines above: background rate (already gridded) as the
-   time-independent term, and Modified Omori's `(K, c, p)` as the starting
-   point / cross-check for ETAS's own triggering-kernel parameters, per
-   docs/scientific-methodology.md's stated progression ("No later stage is
-   promoted merely because it is more complex"). ETAS needs a
-   space-time-magnitude MLE over the *entire* catalog jointly (not
-   per-family, unlike Modified Omori) -- expect this to need its own design
-   pass on the likelihood/optimization approach before implementation,
-   given it is a materially harder numerical problem than anything
-   implemented so far in this repository.
+7. ~~Temporal ETAS~~ — done 2026-08-16 (see Phase 4 started section above).
+   Next per docs/scientific-methodology.md's progression: spatiotemporal
+   ETAS (add a spatial triggering kernel, e.g. Ogata 1998's isotropic
+   power-law density around each parent, to the already-fit temporal
+   structure -- do not refit temporal parameters from scratch with a naive
+   spatial bolt-on; decide explicitly whether space is added to the same
+   joint MLE or fit conditionally on the temporal fit). After that: IAS
+   (Phase 5), then CSEP/pyCSEP evaluation and walk-forward replay (Phase 6)
+   -- forecasts cannot be honestly claimed as validated before that gate.
 
 ## Known technical risks and decisions still to verify
 

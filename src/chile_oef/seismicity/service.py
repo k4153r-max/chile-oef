@@ -15,6 +15,7 @@ from chile_oef.db.models import (
     SeismicityBackgroundRateRun,
     SeismicityDeclusteringRun,
     SpatialGrid,
+    TemporalEtasEstimate,
 )
 from chile_oef.seismicity.background_rate import (
     BackgroundEventLocation,
@@ -38,6 +39,7 @@ from chile_oef.seismicity.declustering import (
     EventForDeclustering,
     decluster,
 )
+from chile_oef.seismicity.etas import EtasParameters, EtasPolicy, estimate_temporal_etas
 from chile_oef.seismicity.gutenberg_richter import estimate_b_value
 from chile_oef.seismicity.modified_omori import ModifiedOmoriPolicy, estimate_modified_omori
 
@@ -569,3 +571,131 @@ class ModifiedOmoriService:
             records.append(record)
         self.session.commit()
         return records
+
+
+class TemporalEtasService:
+    def __init__(self, session: Session, *, policy: EtasPolicy | None = None) -> None:
+        self.session = session
+        self.policy = policy or EtasPolicy()
+
+    def _resolve_initial_guess(
+        self, declustering_run_id: uuid.UUID | None, *, event_count: int, duration_days: float
+    ) -> tuple[EtasParameters | None, uuid.UUID | None]:
+        """Average (K, c, p) over a declustering run's estimable Modified
+        Omori families, weighted by family size, per
+        docs/PROJECT_STATE.md's guidance that ETAS should build on that
+        baseline rather than fit blind. Purely a starting point for the
+        optimizer -- ETAS does not require declustering to run, so a
+        missing or empty run just falls back to a crude guess.
+        """
+        if declustering_run_id is None:
+            return None, None
+        omori_rows = list(
+            self.session.scalars(
+                select(ModifiedOmoriSequenceEstimate).where(
+                    ModifiedOmoriSequenceEstimate.declustering_run_id == declustering_run_id,
+                    ModifiedOmoriSequenceEstimate.support_state == "estimable",
+                )
+            )
+        )
+        if not omori_rows:
+            return None, None
+        total_weight = sum(row.event_count for row in omori_rows)
+        k0 = sum(row.k_productivity * row.event_count for row in omori_rows) / total_weight
+        c = sum(row.c_days * row.event_count for row in omori_rows) / total_weight
+        p = sum(row.p_exponent * row.event_count for row in omori_rows) / total_weight
+        crude_mu = max(event_count / duration_days / 2.0, 1e-6)
+        seed_row = max(omori_rows, key=lambda row: row.event_count)
+        return EtasParameters(
+            mu_per_day=crude_mu, k0=k0, alpha=1.0, c_days=c, p_exponent=p
+        ), seed_row.id
+
+    def estimate_for_completeness_estimate(
+        self,
+        completeness_estimate_id: uuid.UUID,
+        *,
+        declustering_run_id: uuid.UUID | None = None,
+    ) -> TemporalEtasEstimate:
+        """Fit temporal ETAS on the catalog at/above a specific completeness
+        estimate's Mc. If `declustering_run_id` is given, its estimable
+        Modified Omori families seed the optimizer's starting point (see
+        _resolve_initial_guess); this is a soft, documented reference, not
+        a required dependency.
+        """
+        source = self.session.get(CompletenessEstimate, completeness_estimate_id)
+        if source is None:
+            raise ValueError(f"completeness estimate {completeness_estimate_id} not found")
+        if source.mc_value is None:
+            raise ValueError(
+                f"completeness estimate {completeness_estimate_id} has no mc_value "
+                f"(support_state={source.support_state!r}); cannot fit ETAS on it"
+            )
+
+        selection = fetch_magnitude_catalog(
+            self.session,
+            as_of=source.catalog_as_of,
+            start_time=source.start_time,
+            end_time=source.end_time,
+            magnitude_type=source.magnitude_type,
+            min_latitude=source.min_latitude,
+            max_latitude=source.max_latitude,
+            min_longitude=source.min_longitude,
+            max_longitude=source.max_longitude,
+        )
+        above_mc = [
+            observation
+            for observation in selection.observations
+            if observation.magnitude >= source.mc_value
+        ]
+        above_mc.sort(key=lambda observation: observation.event_time)
+        duration_days = (source.end_time - source.start_time).total_seconds() / 86400.0
+        event_times_days = [
+            (observation.event_time - source.start_time).total_seconds() / 86400.0
+            for observation in above_mc
+        ]
+        magnitudes = [observation.magnitude for observation in above_mc]
+
+        initial_guess, initial_guess_source_id = self._resolve_initial_guess(
+            declustering_run_id, event_count=len(above_mc), duration_days=duration_days
+        )
+
+        result = estimate_temporal_etas(
+            event_times_days,
+            magnitudes,
+            reference_magnitude=source.mc_value,
+            observation_duration_days=duration_days,
+            policy=self.policy,
+            initial_guess=initial_guess,
+        )
+
+        parameters = result.parameters
+        record = TemporalEtasEstimate(
+            completeness_estimate_id=source.id,
+            initial_guess_source_id=initial_guess_source_id,
+            start_time=source.start_time,
+            end_time=source.end_time,
+            min_latitude=source.min_latitude,
+            max_latitude=source.max_latitude,
+            min_longitude=source.min_longitude,
+            max_longitude=source.max_longitude,
+            magnitude_type=source.magnitude_type,
+            reference_magnitude=result.reference_magnitude,
+            event_count=result.event_count,
+            support_state=result.support_state,
+            observation_duration_days=result.observation_duration_days,
+            mu_per_day=parameters.mu_per_day if parameters else None,
+            k0=parameters.k0 if parameters else None,
+            alpha=parameters.alpha if parameters else None,
+            c_days=parameters.c_days if parameters else None,
+            p_exponent=parameters.p_exponent if parameters else None,
+            converged=result.converged,
+            restarts_converged=result.restarts_converged,
+            log_likelihood=result.log_likelihood,
+            method_version=result.method_version,
+            calibration_status=result.calibration_status,
+            catalog_as_of=source.catalog_as_of,
+            diagnostics_json=result.diagnostics,
+        )
+        self.session.add(record)
+        self.session.commit()
+        return record
