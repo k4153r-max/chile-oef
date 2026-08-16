@@ -14,6 +14,7 @@ from chile_oef.db.models.catalog import (
     SourceEndpoint,
     SourceEvent,
 )
+from chile_oef.db.models.seismicity import CompletenessEstimate
 from chile_oef.db.models.tectonics import (
     EventTectonicClassification,
     FaultTrace,
@@ -28,6 +29,7 @@ __all__ = [
     "CanonicalEvent",
     "CanonicalEventMembership",
     "CatalogSource",
+    "CompletenessEstimate",
     "DataQualityLog",
     "DatasetArtifact",
     "DatasetEventRevision",

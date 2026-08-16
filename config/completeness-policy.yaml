@@ -1,0 +1,14 @@
+version: 1
+status: experimental
+method_version: maximum_curvature_diagnostic_v1
+calibration_status: uncalibrated_diagnostic_estimator
+role: diagnostic
+bin_width_magnitude: 0.1
+maximum_curvature_correction_magnitude: 0.2
+supported_minimum_events: 200
+high_uncertainty_minimum_events: 100
+research_only_minimum_events: 50
+restrictions:
+  primary_estimator_pending: entire_magnitude_range_bootstrap
+  goodness_of_fit_cross_check_pending: true
+  may_publish_as_calibrated_completeness: false

@@ -16,6 +16,8 @@ from chile_oef.ingestion.service import IngestionService, sync_source_registry
 from chile_oef.ingestion.sources.csn_daily import CsnDailyAdapter
 from chile_oef.ingestion.sources.usgs_fdsn import UsgsFdsnAdapter
 from chile_oef.ingestion.sources.usgs_geojson import UsgsGeoJsonAdapter
+from chile_oef.seismicity.completeness import load_completeness_policy
+from chile_oef.seismicity.service import CompletenessEstimationService
 from chile_oef.tectonics.assets import TectonicAssetService
 from chile_oef.tectonics.classification import load_classification_parameters
 from chile_oef.tectonics.faults import FaultService
@@ -81,6 +83,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="classify pending event revisions with ready pinned releases",
     )
     classify.add_argument("--limit", type=int, default=1000)
+
+    completeness = subparsers.add_parser(
+        "estimate-completeness",
+        help="diagnostic maximum-curvature Mc over an availability-safe catalog window",
+    )
+    completeness.add_argument("--start", type=_aware_datetime, required=True)
+    completeness.add_argument("--end", type=_aware_datetime, required=True)
+    completeness.add_argument("--as-of", type=_aware_datetime, required=True)
+    completeness.add_argument("--magnitude-type", required=True)
+    completeness.add_argument("--min-latitude", type=float)
+    completeness.add_argument("--max-latitude", type=float)
+    completeness.add_argument("--min-longitude", type=float)
+    completeness.add_argument("--max-longitude", type=float)
     return parser
 
 
@@ -232,6 +247,26 @@ def main() -> None:
                 parameters=load_classification_parameters(settings.tectonic_classifier_path),
             ).classify_pending(limit=args.limit)
         print(f"classified_revisions={count}")
+        return
+    if args.command == "estimate-completeness":
+        with SessionLocal() as session:
+            record = CompletenessEstimationService(
+                session,
+                policy=load_completeness_policy(settings.completeness_policy_path),
+            ).estimate_maximum_curvature(
+                as_of=args.as_of,
+                start_time=args.start,
+                end_time=args.end,
+                magnitude_type=args.magnitude_type,
+                min_latitude=args.min_latitude,
+                max_latitude=args.max_latitude,
+                min_longitude=args.min_longitude,
+                max_longitude=args.max_longitude,
+            )
+        print(
+            f"event_count={record.event_count} support_state={record.support_state} "
+            f"mc_value={record.mc_value} role={record.role}"
+        )
         return
     if args.command == "ingest-usgs-feed":
         adapter = UsgsGeoJsonAdapter(

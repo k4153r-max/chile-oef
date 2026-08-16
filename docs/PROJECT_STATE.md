@@ -42,9 +42,10 @@ Permanent public disclaimer:
 Workspace:
 `/home/k4153r/Documents/Codex/2026-08-16-quiero-que-act-es-como-un`
 
-At this update the directory is **not yet a Git repository**. This matters because
-model/dataset manifests cannot record a real commit until Git is initialized. Do
-not invent a commit identifier.
+Git was initialized on 2026-08-16. Initial commit `eea1333` captured Phase 0-2
+as they stood at that point (no prior history exists to preserve — the
+directory had never been under version control). The Phase 3 slice below was
+committed separately on top of it.
 
 Stack: Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2, Alembic,
 PostgreSQL/PostGIS, NumPy/Pandas/SciPy/GeoPandas/Shapely/ObsPy, later pyCSEP and
@@ -166,6 +167,56 @@ Tectonic scientific decision:
   probabilities. Promotion requires an independently labeled Chilean test catalog,
   reliability assessment and temporal/spatial holdout.
 
+### Phase 3 — magnitude of completeness (Mc): first estimator implemented and validated
+
+Scope delivered on 2026-08-16, deliberately kept to one estimator rather than
+implementing Maximum Curvature, Goodness-of-Fit and Entire-Magnitude-Range
+bootstrap together (see docs/completeness.md's own gate discipline):
+
+- `src/chile_oef/seismicity/catalog_selection.py`: availability-safe magnitude
+  sample selection. Reuses `db/repositories/events.py::list_events`, whose
+  preferred-revision query already enforces `available_at <= as_of`; adds only
+  the single-magnitude-type restriction Mc requires (`select_single_magnitude_type`).
+- `src/chile_oef/seismicity/completeness.py`: `support_state` implementing the
+  exact reporting bands from docs/completeness.md (>=200 supported, 100-199
+  high_uncertainty, 50-99 research_only, <50 not_estimable — not_estimable
+  means no Mc value is computed at all, not just a low-confidence one) and
+  `estimate_mc_maximum_curvature`, the Wiemer & Wyss (2000) maximum-curvature
+  estimator with the standard +0.2 correction. Per docs/completeness.md this
+  method is registered as **diagnostic only**; the primary estimator (Entire
+  Magnitude Range with bootstrap uncertainty) is not implemented yet.
+- `src/chile_oef/db/models/seismicity.py::CompletenessEstimate` +
+  Alembic migration `0005`: append-only persistence (no update/delete path,
+  matching the forecast-immutability invariant); stores time window, spatial
+  bounding box, magnitude type, event count, uncertainty/support state,
+  method/version, role, and `catalog_as_of`.
+- `src/chile_oef/seismicity/service.py::CompletenessEstimationService` and CLI
+  `estimate-completeness` wire selection -> estimation -> persistence.
+- Tests: `tests/unit/test_completeness.py` (support-band boundaries, a fixed
+  literal-catalog regression fixture pinning the exact histogram peak and
+  correction, exact-correction-application check for arbitrary policy values,
+  and a seeded synthetic Gutenberg-Richter-with-logistic-rolloff recovery
+  check used only as a loose sanity bound, not a precision claim);
+  `tests/unit/test_catalog_selection.py` (pure filtering, timezone/window
+  validation); `tests/integration/test_completeness_pipeline.py` (real
+  ingestion + Postgres: proves a revision whose `available_at` is after
+  `as_of` is excluded even though its `event_time` falls inside the window,
+  and that a 200-event supported-band run persists correctly).
+
+Final gate on 2026-08-16: **58 tests passed** (39 prior + 19 new), Ruff and
+`ruff format --check` passed, `alembic upgrade head` reached `0005`, and
+`alembic check` reported no new upgrade operations. CLI smoke-tested against
+the real dev database (`estimate-completeness` over an empty window returned
+`event_count=0 support_state=not_estimable`, then the resulting row was
+deleted since it carried no real events).
+
+Explicitly not done in this slice: Goodness-of-Fit cross-check, Entire
+Magnitude Range with bootstrap uncertainty (the actual primary estimator),
+spatial adaptive-neighborhood Mc (this slice only supports a fixed bounding
+box or no spatial filter at all), tectonic-class-conditioned Mc, and any API
+endpoint (only CLI exists so far). None of these should be assumed
+implemented just because this section exists.
+
 ## Verified static data releases
 
 ### USGS Slab2 South America
@@ -206,19 +257,24 @@ without recording a new release and re-verifying hashes.
 
 The following should be done next, in this order:
 
-1. Initialize Git before creating any scientific dataset/model manifest that claims
-   a code commit. Do not fabricate the missing historical commit.
-2. Design Phase 3 as a small scientific slice: catalog selection contract for Mc,
-   estimability/support rules, synthetic reference distributions and scientific
-   regression fixtures. Do not implement ETAS yet.
-3. Implement and compare maximum-curvature Mc only as an initial estimator, then
-   goodness-of-fit and at least one modern uncertainty-aware method. Every estimate
-   must store time window, region/cell, magnitude types, event count, uncertainty,
-   method/version and `catalog_as_of`.
-4. Implement Gutenberg–Richter b-value MLE with uncertainty and declared Mc;
-   refuse under-supported cells rather than returning unstable values.
+1. ~~Initialize Git~~ — done 2026-08-16 (commit `eea1333`, see Repository and
+   environment above).
+2. ~~Design Phase 3 as a small scientific slice~~ — done 2026-08-16: catalog
+   selection contract, estimability/support bands, and regression/synthetic
+   fixtures exist (see Phase 3 section above).
+3. Implement Goodness-of-Fit as the second Mc cross-check, then Entire
+   Magnitude Range with bootstrap uncertainty as the actual primary estimator
+   registered in docs/completeness.md. Maximum Curvature (done) stays
+   diagnostic-only; do not promote it to primary. Reuse
+   `catalog_selection.fetch_magnitude_catalog` rather than re-deriving
+   availability-safe selection.
+4. Implement Gutenberg–Richter b-value MLE with uncertainty and a declared Mc
+   (from step 3, not Maximum Curvature); refuse under-supported cells rather
+   than returning unstable values.
 5. Add fixed historical fixtures and walk-forward tests that demonstrate no event
-   with `available_at > catalog_as_of` enters a feature or fit.
+   with `available_at > catalog_as_of` enters a feature or fit — the pattern in
+   `tests/integration/test_completeness_pipeline.py::test_availability_invariant_excludes_late_arriving_revision`
+   can be extended rather than rebuilt.
 6. Only after Mc/GR gates pass, proceed to declustered/smoothed background and
    Modified Omori. Temporal ETAS follows those baselines.
 

@@ -11,7 +11,8 @@ established statistical baselines.
 ## Current scope
 
 The repository contains the Phase 0 scientific contracts, the Phase 1 catalog
-foundation, and the Phase 2 tectonic foundation:
+foundation, the Phase 2 tectonic foundation, and a first Phase 3 magnitude-of-
+completeness slice:
 
 - immutable raw-source artifacts;
 - bitemporal source event revisions;
@@ -23,9 +24,11 @@ foundation, and the Phase 2 tectonic foundation:
 - a versioned regular 0.1° evaluation grid;
 - checksum-pinned Slab2 and CHAF ingestion;
 - bilinear Slab2 sampling and CHAF surface-trace distances;
-- an explicitly uncalibrated tectonic classification baseline.
+- an explicitly uncalibrated tectonic classification baseline;
+- availability-safe magnitude catalog selection and a diagnostic-only
+  maximum-curvature Mc estimator with configured estimability bands.
 
-Mc, Gutenberg–Richter, Omori, ETAS, IAS and ML are deliberately not implemented
+Gutenberg–Richter, Omori, ETAS, IAS and ML are deliberately not implemented
 yet. The tectonic class uncertainty masses are not calibrated forecast
 probabilities.
 

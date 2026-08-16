@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     source_registry_path: Path = Path("config/source-registry.yaml")
     tectonic_registry_path: Path = Path("config/tectonic-assets.yaml")
     tectonic_classifier_path: Path = Path("config/tectonic-classifier.yaml")
+    completeness_policy_path: Path = Path("config/completeness-policy.yaml")
     api_prefix: str = "/v1"
     log_level: str = "INFO"
     request_timeout_seconds: float = Field(default=30.0, gt=0)
