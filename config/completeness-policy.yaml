@@ -12,6 +12,15 @@ goodness_of_fit_method_version: goodness_of_fit_diagnostic_v1
 goodness_of_fit_target_confidence_percent: 95.0
 goodness_of_fit_fallback_confidence_percent: 90.0
 goodness_of_fit_minimum_events_above_candidate: 10
+goodness_of_fit_minimum_bins_above_candidate: 10
+emr_method_version: entire_magnitude_range_bootstrap_v1
+emr_calibration_status: uncalibrated_primary_estimator
+emr_bootstrap_resamples: 200
+emr_bootstrap_seed: 20260816
+emr_confidence_level_percent: 95.0
+emr_sigma_min_magnitude: 0.01
+emr_sigma_max_magnitude: 2.0
+emr_beta_min: 0.01
+emr_beta_max: 10.0
 restrictions:
-  primary_estimator_pending: entire_magnitude_range_bootstrap
   may_publish_as_calibrated_completeness: false

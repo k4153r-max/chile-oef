@@ -25,8 +25,11 @@ completeness slice:
 - checksum-pinned Slab2 and CHAF ingestion;
 - bilinear Slab2 sampling and CHAF surface-trace distances;
 - an explicitly uncalibrated tectonic classification baseline;
-- availability-safe magnitude catalog selection and a diagnostic-only
-  maximum-curvature Mc estimator with configured estimability bands.
+- availability-safe magnitude catalog selection and three magnitude-of-
+  completeness estimators with configured estimability bands: Maximum
+  Curvature and Goodness-of-Fit (diagnostic cross-checks) and Entire
+  Magnitude Range with bootstrap uncertainty (the registered primary
+  estimator, Ogata & Katsura 1993).
 
 Gutenberg–Richter, Omori, ETAS, IAS and ML are deliberately not implemented
 yet. The tectonic class uncertainty masses are not calibrated forecast

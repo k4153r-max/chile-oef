@@ -94,7 +94,7 @@ def build_parser() -> argparse.ArgumentParser:
     completeness.add_argument("--magnitude-type", required=True)
     completeness.add_argument(
         "--method",
-        choices=["maximum_curvature", "goodness_of_fit"],
+        choices=["maximum_curvature", "goodness_of_fit", "entire_magnitude_range"],
         default="maximum_curvature",
     )
     completeness.add_argument("--min-latitude", type=float)
@@ -259,11 +259,12 @@ def main() -> None:
                 session,
                 policy=load_completeness_policy(settings.completeness_policy_path),
             )
-            estimate = (
-                service.estimate_maximum_curvature
-                if args.method == "maximum_curvature"
-                else service.estimate_goodness_of_fit
-            )
+            estimators = {
+                "maximum_curvature": service.estimate_maximum_curvature,
+                "goodness_of_fit": service.estimate_goodness_of_fit,
+                "entire_magnitude_range": service.estimate_entire_magnitude_range,
+            }
+            estimate = estimators[args.method]
             record = estimate(
                 as_of=args.as_of,
                 start_time=args.start,

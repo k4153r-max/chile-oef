@@ -248,13 +248,62 @@ Added on 2026-08-16, same session as the Maximum Curvature slice above:
   integration test proving the full ingest -> select -> estimate -> persist
   path for this second estimator.
 
-Final gate on 2026-08-16 (Phase 3 total): **62 tests passed** (58 prior + 4
-new), Ruff, `ruff format --check`, and `alembic check` all passed.
+Final gate on 2026-08-16 (Phase 3, MaxC + GFT): **62 tests passed** (58 prior
++ 4 new), Ruff, `ruff format --check`, and `alembic check` all passed.
 
-Still not done: Entire Magnitude Range with bootstrap uncertainty remains the
-only registered primary estimator and is not implemented; both Maximum
-Curvature and Goodness-of-Fit stay `role=diagnostic`. No forecast, API
-endpoint, or Gutenberg-Richter b-value model consumes either estimator yet.
+### Phase 3 continued — Entire Magnitude Range (primary estimator) implemented and validated
+
+Added on 2026-08-16, same session. This is the estimator docs/completeness.md
+actually registers as primary; Maximum Curvature and Goodness-of-Fit stay
+`role=diagnostic` cross-checks and were not changed.
+
+- Added `numpy` and `scipy` as real dependencies (first numerical
+  dependencies in the project; previously deferred as "later" in this file).
+  `uv.lock` updated accordingly.
+- `estimate_mc_entire_magnitude_range` in `completeness.py`: Ogata & Katsura
+  (1993) method. Jointly fits, by maximum likelihood, `mu` (the 50%-detection
+  magnitude, reported as `mc_value`), `sigma` (detection rolloff width), and
+  the Gutenberg-Richter `b`-value, using a discretized Poisson-process
+  likelihood (Gutenberg-Richter rate x normal-CDF detection function, binned
+  at `bin_width_magnitude`) optimized with `scipy.optimize.minimize`
+  (L-BFGS-B, bounded). Initial guess reuses the Maximum Curvature peak for
+  `mu` and an Aki-style estimate for `beta`.
+- Uncertainty: nonparametric bootstrap (`numpy.random.default_rng`, seeded
+  and configurable; default 200 resamples, refit from the point estimate
+  each time for speed), reporting a percentile confidence interval on
+  `mc_value` at the configured level (default 95%).
+- Point estimation that fails to converge, or a catalog with too few events,
+  returns `mc_value=None` rather than a value the optimizer did not actually
+  converge on -- same refuse-rather-than-guess discipline as Goodness-of-Fit.
+- Verified against the exact generative model it assumes (Gutenberg-Richter
+  thinned by a normal-CDF detection function, seeded rejection sampling):
+  with 3000 synthetic events at true `mu=3.0, sigma=0.1, b=1.0`, recovered
+  `mu=2.997, sigma=0.104, b=1.001` with a 95% bootstrap interval
+  `(2.984, 3.018)` correctly bracketing the true value. This is a
+  correctly-specified-model check (unlike MaxC/GFT's cross-check role, EMR
+  is expected to be numerically precise here, not just in the right
+  neighborhood) -- committed test tolerances are loosened only to absorb
+  Monte Carlo sampling noise and a reduced bootstrap count for test speed.
+- `CompletenessEstimationService.estimate_entire_magnitude_range` and
+  `chile-oef estimate-completeness --method entire_magnitude_range` wire it
+  through the same availability-safe selection and `completeness_estimates`
+  table (sigma, b-value, and the confidence interval go in
+  `diagnostics_json`; no new migration).
+- Tests added: not-estimable case; synthetic-recovery precision check;
+  role/calibration_status assertions (`role="primary"`,
+  `calibration_status="uncalibrated_primary_estimator"`); an integration test
+  proving the full ingest -> select -> fit -> bootstrap -> persist path.
+
+Final gate on 2026-08-16 (Phase 3 total, all three estimators): **65 tests
+passed** (62 prior + 3 new), Ruff, `ruff format --check`, and `alembic check`
+all passed. CLI smoke-tested against the real dev database with
+`--method entire_magnitude_range`; the resulting empty-catalog row was
+deleted afterward since it carried no real events.
+
+Still not consuming any of these three estimators: Gutenberg-Richter b-value
+model (item 4 of Exact next work), forecasts, and the public API -- none
+exist yet for seismicity. `CompletenessEstimate` rows exist only via direct
+CLI/service calls so far.
 
 ## Verified static data releases
 
@@ -301,20 +350,21 @@ The following should be done next, in this order:
 2. ~~Design Phase 3 as a small scientific slice~~ — done 2026-08-16: catalog
    selection contract, estimability/support bands, and regression/synthetic
    fixtures exist (see Phase 3 section above).
-3. ~~Implement Goodness-of-Fit as the second Mc cross-check~~ — done
-   2026-08-16. Remaining: Entire Magnitude Range with bootstrap uncertainty
-   as the actual primary estimator registered in docs/completeness.md.
-   Maximum Curvature and Goodness-of-Fit (both done) stay diagnostic-only; do
-   not promote either to primary. EMR needs a detection-function MLE fit
-   (Ogata & Katsura, 1993) plus bootstrap resampling for uncertainty, which
-   likely needs a numerical optimizer — evaluate adding `scipy` as a real
-   dependency rather than hand-rolling one, given PROJECT_STATE already names
-   SciPy as part of the intended stack. Reuse
-   `catalog_selection.fetch_magnitude_catalog` rather than re-deriving
-   availability-safe selection.
-4. Implement Gutenberg–Richter b-value MLE with uncertainty and a declared Mc
-   (from step 3, not Maximum Curvature); refuse under-supported cells rather
-   than returning unstable values.
+3. ~~Implement Goodness-of-Fit, then Entire Magnitude Range with bootstrap~~
+   — done 2026-08-16. All three Mc estimators from docs/completeness.md now
+   exist: Maximum Curvature and Goodness-of-Fit (`role=diagnostic`), Entire
+   Magnitude Range (`role=primary`, the one actually registered as primary).
+   `numpy`/`scipy` are now real dependencies.
+4. Implement Gutenberg–Richter b-value MLE with uncertainty, using the Mc
+   from Entire Magnitude Range (the primary estimator, not Maximum Curvature
+   or Goodness-of-Fit) as the declared completeness threshold; refuse
+   under-supported cells rather than returning unstable values. Note EMR's
+   own point-fit already estimates a `b_value` as a byproduct of its MLE
+   (see `completeness.py`) -- decide explicitly whether Gutenberg-Richter
+   reuses that fit or re-estimates `b` independently above the declared Mc
+   with its own uncertainty method (Aki 1965 MLE with the standard
+   `b/sqrt(N)` or bootstrap standard error); do not silently duplicate one as
+   the other without recording which was used.
 5. Add fixed historical fixtures and walk-forward tests that demonstrate no event
    with `available_at > catalog_as_of` enters a feature or fit — the pattern in
    `tests/integration/test_completeness_pipeline.py::test_availability_invariant_excludes_late_arriving_revision`

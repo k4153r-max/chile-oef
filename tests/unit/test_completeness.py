@@ -1,9 +1,12 @@
 import random
 
+import numpy as np
 import pytest
+from scipy.stats import norm
 
 from chile_oef.seismicity.completeness import (
     CompletenessPolicy,
+    estimate_mc_entire_magnitude_range,
     estimate_mc_goodness_of_fit,
     estimate_mc_maximum_curvature,
     support_state,
@@ -221,3 +224,71 @@ def test_goodness_of_fit_below_minimum_sample_is_not_estimable() -> None:
     assert result.mc_value is None
     assert result.achieved_confidence_percent is None
     assert result.best_fit_quality_percent is None
+
+
+def _synthetic_normal_rolloff_catalog(
+    *,
+    seed: int,
+    sample_size: int,
+    true_mu: float,
+    true_sigma: float,
+    true_b: float,
+) -> list[float]:
+    """Rejection-sample the exact generative model Entire Magnitude Range
+    assumes: a Gutenberg-Richter rate thinned by a normal-CDF detection
+    function. Unlike the logistic-rolloff fixture used for Maximum
+    Curvature, this is a correctly-specified-model test: EMR should recover
+    all three parameters closely, not just land in the right neighborhood.
+    """
+    rng = np.random.default_rng(seed)
+    beta = true_b * np.log(10.0)
+    floor, cap = true_mu - 1.5, true_mu + 3.0
+
+    def gr_density(magnitude: np.ndarray) -> np.ndarray:
+        return beta * np.exp(-beta * (magnitude - floor))
+
+    def detection_probability(magnitude: np.ndarray) -> np.ndarray:
+        return norm.cdf((magnitude - true_mu) / true_sigma)
+
+    envelope = gr_density(np.array([floor]))[0]
+    accepted: list[float] = []
+    while len(accepted) < sample_size:
+        batch = rng.uniform(floor, cap, size=4000)
+        acceptance = gr_density(batch) * detection_probability(batch) / envelope
+        draws = rng.uniform(0.0, 1.0, size=4000)
+        accepted.extend(batch[draws < acceptance].tolist())
+    return accepted[:sample_size]
+
+
+def test_entire_magnitude_range_below_minimum_sample_is_not_estimable() -> None:
+    result = estimate_mc_entire_magnitude_range([3.0] * 49)
+    assert result.support_state == "not_estimable"
+    assert result.mc_value is None
+    assert result.converged is False
+    assert result.bootstrap_resamples_converged == 0
+    assert result.role == "primary"
+
+
+def test_entire_magnitude_range_recovers_synthetic_parameters() -> None:
+    """Correctly-specified-model recovery check, seeded and deterministic.
+    Tolerances are loose enough to absorb Monte Carlo noise from the
+    rejection sampler and a small bootstrap count, not to hide a wrong
+    estimator.
+    """
+    true_mu, true_sigma, true_b = 3.0, 0.12, 1.0
+    magnitudes = _synthetic_normal_rolloff_catalog(
+        seed=7, sample_size=1500, true_mu=true_mu, true_sigma=true_sigma, true_b=true_b
+    )
+    policy = CompletenessPolicy(emr_bootstrap_resamples=30)
+    result = estimate_mc_entire_magnitude_range(magnitudes, policy=policy)
+
+    assert result.converged is True
+    assert result.role == "primary"
+    assert result.calibration_status == "uncalibrated_primary_estimator"
+    assert result.mc_value == pytest.approx(true_mu, abs=0.15)
+    assert result.detection_sigma_magnitude == pytest.approx(true_sigma, abs=0.1)
+    assert result.b_value == pytest.approx(true_b, abs=0.3)
+    assert result.bootstrap_resamples_converged >= 20
+    assert result.mc_confidence_interval is not None
+    lower, upper = result.mc_confidence_interval
+    assert lower < true_mu < upper

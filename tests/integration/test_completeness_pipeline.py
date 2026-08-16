@@ -2,7 +2,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import numpy as np
 import pytest
+from scipy.stats import norm
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -231,4 +233,73 @@ async def test_goodness_of_fit_estimate_persists_through_the_service(
         assert record.mc_value == pytest.approx(3.0)
         assert record.diagnostics_json["achieved_confidence_percent"] == pytest.approx(95.0)
         assert record.method_version == "goodness_of_fit_diagnostic_v1"
+        assert record.id is not None
+
+
+def _normal_rolloff_magnitudes(*, seed: int, sample_size: int, true_mu: float) -> list[float]:
+    rng = np.random.default_rng(seed)
+    true_sigma, true_b = 0.12, 1.0
+    beta = true_b * np.log(10.0)
+    floor, cap = true_mu - 1.5, true_mu + 3.0
+
+    def gr_density(magnitude: np.ndarray) -> np.ndarray:
+        return beta * np.exp(-beta * (magnitude - floor))
+
+    def detection_probability(magnitude: np.ndarray) -> np.ndarray:
+        return norm.cdf((magnitude - true_mu) / true_sigma)
+
+    envelope = gr_density(np.array([floor]))[0]
+    accepted: list[float] = []
+    while len(accepted) < sample_size:
+        batch = rng.uniform(floor, cap, size=4000)
+        acceptance = gr_density(batch) * detection_probability(batch) / envelope
+        draws = rng.uniform(0.0, 1.0, size=4000)
+        accepted.extend(batch[draws < acceptance].tolist())
+    return accepted[:sample_size]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_entire_magnitude_range_estimate_persists_through_the_service(
+    postgis_engine: Engine,
+    tmp_path: Path,
+) -> None:
+    window_start = datetime(2026, 1, 1, tzinfo=UTC)
+    as_of = window_start + timedelta(days=400)
+    window_end = as_of
+    true_mu = 3.0
+
+    magnitudes = _normal_rolloff_magnitudes(seed=11, sample_size=500, true_mu=true_mu)
+    events = [
+        _event(
+            source_event_id=f"emr-{index}",
+            event_time=window_start + timedelta(hours=index),
+            available_at=window_start + timedelta(hours=index, minutes=5),
+            magnitude=magnitude,
+        )
+        for index, magnitude in enumerate(magnitudes)
+    ]
+    with Session(postgis_engine, expire_on_commit=False) as session:
+        sync_source_registry(
+            session,
+            load_source_registry(Path("config/source-registry.yaml")),
+        )
+        await IngestionService(session, RawArchive(tmp_path / "raw")).run(
+            FixtureEventAdapter(events)
+        )
+
+        record = CompletenessEstimationService(
+            session, policy=CompletenessPolicy(emr_bootstrap_resamples=15)
+        ).estimate_entire_magnitude_range(
+            as_of=as_of,
+            start_time=window_start,
+            end_time=window_end,
+            magnitude_type="ml",
+        )
+        assert record.event_count == len(magnitudes)
+        assert record.role == "primary"
+        assert record.calibration_status == "uncalibrated_primary_estimator"
+        assert record.diagnostics_json["converged"] is True
+        assert record.mc_value == pytest.approx(true_mu, abs=0.2)
+        assert record.diagnostics_json["bootstrap_resamples_converged"] > 0
         assert record.id is not None
