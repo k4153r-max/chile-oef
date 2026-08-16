@@ -210,12 +210,51 @@ the real dev database (`estimate-completeness` over an empty window returned
 `event_count=0 support_state=not_estimable`, then the resulting row was
 deleted since it carried no real events).
 
-Explicitly not done in this slice: Goodness-of-Fit cross-check, Entire
-Magnitude Range with bootstrap uncertainty (the actual primary estimator),
-spatial adaptive-neighborhood Mc (this slice only supports a fixed bounding
-box or no spatial filter at all), tectonic-class-conditioned Mc, and any API
-endpoint (only CLI exists so far). None of these should be assumed
-implemented just because this section exists.
+Explicitly not done in this slice: Entire Magnitude Range with bootstrap
+uncertainty (the actual primary estimator), spatial adaptive-neighborhood Mc
+(this slice only supports a fixed bounding box or no spatial filter at all),
+tectonic-class-conditioned Mc, and any API endpoint (only CLI exists so far).
+None of these should be assumed implemented just because this section exists.
+
+### Phase 3 continued — Goodness-of-Fit cross-check implemented and validated
+
+Added on 2026-08-16, same session as the Maximum Curvature slice above:
+
+- `estimate_mc_goodness_of_fit` in `src/chile_oef/seismicity/completeness.py`:
+  Wiemer & Wyss (2000) goodness-of-fit method. For each candidate bin,
+  ascending, fits a Gutenberg-Richter line by Aki (1965) MLE using only
+  events at or above that candidate, then measures what percentage of the
+  observed cumulative distribution (candidate to the largest observed bin,
+  including empty intermediate bins) that line reproduces. Mc is the smallest
+  candidate reaching 95% fit quality; if none does, the smallest reaching
+  90%; if neither is reached, `mc_value` is `None` rather than silently
+  returning whichever candidate scored highest.
+- A real failure mode was caught and fixed before landing: with only a
+  minimum-event-count guard, sparse high-magnitude tail bins could trivially
+  "pass" the fit threshold on pure noise (verified with 500 uniform-random
+  magnitudes, which spuriously reached 95% at the top bin). Fixed by also
+  requiring a minimum span of bins (10, configurable
+  `goodness_of_fit_minimum_bins_above_candidate`) between the candidate and
+  the largest observed bin, not just a minimum event count. Re-verified: the
+  same noise catalog now correctly returns `mc_value=None`.
+- `CompletenessEstimationService.estimate_goodness_of_fit` and
+  `chile-oef estimate-completeness --method goodness_of_fit` wire it through
+  the same availability-safe selection and append-only persistence as
+  Maximum Curvature (same `completeness_estimates` table; no new migration
+  needed — GFT-specific fields go in `diagnostics_json`).
+- Tests added: a deterministic (no RNG) exact-Gutenberg-Richter regression
+  fixture that recovers `mc_value=3.0` at 95% confidence with ~99.6% fit
+  quality; the pure-noise refusal case above; the not-estimable case; and an
+  integration test proving the full ingest -> select -> estimate -> persist
+  path for this second estimator.
+
+Final gate on 2026-08-16 (Phase 3 total): **62 tests passed** (58 prior + 4
+new), Ruff, `ruff format --check`, and `alembic check` all passed.
+
+Still not done: Entire Magnitude Range with bootstrap uncertainty remains the
+only registered primary estimator and is not implemented; both Maximum
+Curvature and Goodness-of-Fit stay `role=diagnostic`. No forecast, API
+endpoint, or Gutenberg-Richter b-value model consumes either estimator yet.
 
 ## Verified static data releases
 
@@ -262,10 +301,15 @@ The following should be done next, in this order:
 2. ~~Design Phase 3 as a small scientific slice~~ — done 2026-08-16: catalog
    selection contract, estimability/support bands, and regression/synthetic
    fixtures exist (see Phase 3 section above).
-3. Implement Goodness-of-Fit as the second Mc cross-check, then Entire
-   Magnitude Range with bootstrap uncertainty as the actual primary estimator
-   registered in docs/completeness.md. Maximum Curvature (done) stays
-   diagnostic-only; do not promote it to primary. Reuse
+3. ~~Implement Goodness-of-Fit as the second Mc cross-check~~ — done
+   2026-08-16. Remaining: Entire Magnitude Range with bootstrap uncertainty
+   as the actual primary estimator registered in docs/completeness.md.
+   Maximum Curvature and Goodness-of-Fit (both done) stay diagnostic-only; do
+   not promote either to primary. EMR needs a detection-function MLE fit
+   (Ogata & Katsura, 1993) plus bootstrap resampling for uncertainty, which
+   likely needs a numerical optimizer — evaluate adding `scipy` as a real
+   dependency rather than hand-rolling one, given PROJECT_STATE already names
+   SciPy as part of the intended stack. Reuse
    `catalog_selection.fetch_magnitude_catalog` rather than re-deriving
    availability-safe selection.
 4. Implement Gutenberg–Richter b-value MLE with uncertainty and a declared Mc

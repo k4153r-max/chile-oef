@@ -4,6 +4,7 @@ import pytest
 
 from chile_oef.seismicity.completeness import (
     CompletenessPolicy,
+    estimate_mc_goodness_of_fit,
     estimate_mc_maximum_curvature,
     support_state,
 )
@@ -148,3 +149,75 @@ def test_maximum_curvature_recovers_synthetic_completeness_within_a_loose_band()
     # already documents MaxC as diagnostic-only pending a registered
     # simulation study.
     assert result.mc_value == pytest.approx(true_mc, abs=0.5)
+
+
+def _exact_gr_catalog_with_underdetected_tail(
+    *, mc_true: float, b_value: float, n0: int, bin_width: float, top_magnitude: float
+) -> list[float]:
+    """Deterministic (no RNG) synthetic catalog: exact integer Gutenberg-Richter
+    counts at and above ``mc_true``, plus a deliberately flat, far-below-trend
+    tail beneath it simulating under-detection. Because the counts above
+    ``mc_true`` are constructed to be *exactly* what a GR line predicts (up to
+    integer rounding), Goodness-of-Fit should reconstruct that line almost
+    perfectly once it reaches ``mc_true`` -- this is a golden-value fixture,
+    not a statistical recovery claim.
+    """
+    bin_count = round((top_magnitude - mc_true) / bin_width) + 1
+    bins = [round(mc_true + index * bin_width, 10) for index in range(bin_count)]
+    cumulative = {
+        bin_value: round(n0 * 10 ** (-b_value * (bin_value - mc_true))) for bin_value in bins
+    }
+    noncumulative = {
+        bin_value: (
+            cumulative[bin_value] - cumulative[bins[index + 1]]
+            if index + 1 < len(bins)
+            else cumulative[bin_value]
+        )
+        for index, bin_value in enumerate(bins)
+    }
+    below_bins = [round(mc_true - index * bin_width, 10) for index in range(1, 11)]
+    for bin_value in below_bins:
+        noncumulative[bin_value] = 5
+    magnitudes: list[float] = []
+    for bin_value, count in noncumulative.items():
+        magnitudes.extend([bin_value] * count)
+    return magnitudes
+
+
+def test_goodness_of_fit_regression_fixture_recovers_exact_gr_break() -> None:
+    magnitudes = _exact_gr_catalog_with_underdetected_tail(
+        mc_true=3.0, b_value=1.0, n0=1000, bin_width=0.1, top_magnitude=5.0
+    )
+    result = estimate_mc_goodness_of_fit(magnitudes)
+    assert result.event_count == len(magnitudes)
+    assert result.support_state == "supported"
+    assert result.mc_value == pytest.approx(3.0)
+    assert result.achieved_confidence_percent == pytest.approx(95.0)
+    assert result.best_fit_quality_percent == pytest.approx(99.62, abs=0.05)
+    assert result.role == "diagnostic"
+
+
+def test_goodness_of_fit_refuses_rather_than_guess_on_pure_noise() -> None:
+    """Uniform-random magnitudes carry no Gutenberg-Richter structure at all.
+    The estimator must not silently return whichever candidate happened to
+    score highest -- it should report that no candidate reached even the
+    fallback confidence level.
+    """
+    rng = random.Random(1)
+    magnitudes = [round(rng.uniform(2.0, 6.0), 1) for _ in range(500)]
+    result = estimate_mc_goodness_of_fit(magnitudes)
+    assert result.mc_value is None
+    assert result.achieved_confidence_percent is None
+    assert (
+        result.diagnostics["reason"] == "fallback_confidence_threshold_not_reached_at_any_candidate"
+    )
+    assert result.best_fit_quality_percent is not None
+    assert result.best_fit_quality_percent < result.diagnostics["fallback_confidence_percent"]
+
+
+def test_goodness_of_fit_below_minimum_sample_is_not_estimable() -> None:
+    result = estimate_mc_goodness_of_fit([3.0] * 49)
+    assert result.support_state == "not_estimable"
+    assert result.mc_value is None
+    assert result.achieved_confidence_percent is None
+    assert result.best_fit_quality_percent is None

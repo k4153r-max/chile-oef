@@ -8,7 +8,10 @@ maximum_curvature_correction_magnitude: 0.2
 supported_minimum_events: 200
 high_uncertainty_minimum_events: 100
 research_only_minimum_events: 50
+goodness_of_fit_method_version: goodness_of_fit_diagnostic_v1
+goodness_of_fit_target_confidence_percent: 95.0
+goodness_of_fit_fallback_confidence_percent: 90.0
+goodness_of_fit_minimum_events_above_candidate: 10
 restrictions:
   primary_estimator_pending: entire_magnitude_range_bootstrap
-  goodness_of_fit_cross_check_pending: true
   may_publish_as_calibrated_completeness: false

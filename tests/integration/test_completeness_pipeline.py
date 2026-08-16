@@ -165,3 +165,70 @@ async def test_estimate_persists_supported_band_result(
         assert record.support_state == "supported"
         assert record.mc_value == pytest.approx(3.2)
         assert record.id is not None
+
+
+def _exact_gr_magnitudes(
+    *, mc_true: float, b_value: float, n0: int, bin_width: float
+) -> list[float]:
+    top_magnitude = mc_true + 2.0
+    bin_count = round((top_magnitude - mc_true) / bin_width) + 1
+    bins = [round(mc_true + index * bin_width, 10) for index in range(bin_count)]
+    cumulative = {
+        bin_value: round(n0 * 10 ** (-b_value * (bin_value - mc_true))) for bin_value in bins
+    }
+    noncumulative = {
+        bin_value: (
+            cumulative[bin_value] - cumulative[bins[index + 1]]
+            if index + 1 < len(bins)
+            else cumulative[bin_value]
+        )
+        for index, bin_value in enumerate(bins)
+    }
+    for bin_value in (round(mc_true - index * bin_width, 10) for index in range(1, 11)):
+        noncumulative[bin_value] = 3
+    magnitudes: list[float] = []
+    for bin_value, count in noncumulative.items():
+        magnitudes.extend([bin_value] * count)
+    return magnitudes
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_goodness_of_fit_estimate_persists_through_the_service(
+    postgis_engine: Engine,
+    tmp_path: Path,
+) -> None:
+    window_start = datetime(2026, 1, 1, tzinfo=UTC)
+    as_of = window_start + timedelta(days=400)
+    window_end = as_of
+
+    magnitudes = _exact_gr_magnitudes(mc_true=3.0, b_value=1.0, n0=200, bin_width=0.1)
+    events = [
+        _event(
+            source_event_id=f"gof-{index}",
+            event_time=window_start + timedelta(hours=index),
+            available_at=window_start + timedelta(hours=index, minutes=5),
+            magnitude=magnitude,
+        )
+        for index, magnitude in enumerate(magnitudes)
+    ]
+    with Session(postgis_engine, expire_on_commit=False) as session:
+        sync_source_registry(
+            session,
+            load_source_registry(Path("config/source-registry.yaml")),
+        )
+        await IngestionService(session, RawArchive(tmp_path / "raw")).run(
+            FixtureEventAdapter(events)
+        )
+
+        record = CompletenessEstimationService(session).estimate_goodness_of_fit(
+            as_of=as_of,
+            start_time=window_start,
+            end_time=window_end,
+            magnitude_type="ml",
+        )
+        assert record.event_count == len(magnitudes)
+        assert record.mc_value == pytest.approx(3.0)
+        assert record.diagnostics_json["achieved_confidence_percent"] == pytest.approx(95.0)
+        assert record.method_version == "goodness_of_fit_diagnostic_v1"
+        assert record.id is not None

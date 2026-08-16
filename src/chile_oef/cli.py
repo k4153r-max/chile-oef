@@ -92,6 +92,11 @@ def build_parser() -> argparse.ArgumentParser:
     completeness.add_argument("--end", type=_aware_datetime, required=True)
     completeness.add_argument("--as-of", type=_aware_datetime, required=True)
     completeness.add_argument("--magnitude-type", required=True)
+    completeness.add_argument(
+        "--method",
+        choices=["maximum_curvature", "goodness_of_fit"],
+        default="maximum_curvature",
+    )
     completeness.add_argument("--min-latitude", type=float)
     completeness.add_argument("--max-latitude", type=float)
     completeness.add_argument("--min-longitude", type=float)
@@ -250,10 +255,16 @@ def main() -> None:
         return
     if args.command == "estimate-completeness":
         with SessionLocal() as session:
-            record = CompletenessEstimationService(
+            service = CompletenessEstimationService(
                 session,
                 policy=load_completeness_policy(settings.completeness_policy_path),
-            ).estimate_maximum_curvature(
+            )
+            estimate = (
+                service.estimate_maximum_curvature
+                if args.method == "maximum_curvature"
+                else service.estimate_goodness_of_fit
+            )
+            record = estimate(
                 as_of=args.as_of,
                 start_time=args.start,
                 end_time=args.end,
@@ -264,8 +275,9 @@ def main() -> None:
                 max_longitude=args.max_longitude,
             )
         print(
-            f"event_count={record.event_count} support_state={record.support_state} "
-            f"mc_value={record.mc_value} role={record.role}"
+            f"method={args.method} event_count={record.event_count} "
+            f"support_state={record.support_state} mc_value={record.mc_value} "
+            f"role={record.role}"
         )
         return
     if args.command == "ingest-usgs-feed":
