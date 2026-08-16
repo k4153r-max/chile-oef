@@ -1,0 +1,30 @@
+name: Seed production database
+
+# Manually triggered one-off: populates a freshly-deployed database with
+# real data (USGS backfill + fitted Mc/GR/ETAS + one forecast). Not a CI
+# job and not run on push -- see scripts/seed_production_pipeline.py.
+# CHILE_OEF_DATABASE_URL must point at the target Postgres instance
+# (repository secret), reachable from GitHub's runners on port 5432 --
+# this workflow exists specifically because that connection is not
+# reachable from the primary development environment.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CHILE_OEF_DATABASE_URL: ${{ secrets.CHILE_OEF_DATABASE_URL }}
+      CHILE_OEF_ENVIRONMENT: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install --upgrade pip && pip install .[dev]
+      - name: Apply migrations
+        run: alembic upgrade head
+      - name: Run pipeline seed
+        run: python scripts/seed_production_pipeline.py
