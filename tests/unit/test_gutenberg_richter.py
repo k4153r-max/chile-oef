@@ -74,3 +74,39 @@ def test_higher_b_value_catalog_recovers_higher_b_value() -> None:
     assert low_result.b_value == pytest.approx(0.8, abs=0.02)
     assert high_result.b_value == pytest.approx(1.3, abs=0.02)
     assert low_result.b_value < high_result.b_value
+    assert low_result.diagnostics["limited_dynamic_range"] is False
+    assert low_result.diagnostics["unusual_b_value"] is False
+
+
+# USGS ComCat mb histogram for Chile, 2005-01-01..2015-01-01, at/above the
+# production Mc=4.97 (binned 5.0). Replicated 2026-08-16 from the live FDSN
+# service; see research/b_value_mb_truncation.md. Not a synthetic GR catalog.
+_PRODUCTION_MB_HISTOGRAM = {
+    5.0: 200,
+    5.1: 104,
+    5.2: 75,
+    5.3: 44,
+    5.4: 21,
+    5.5: 10,
+    5.6: 13,
+    5.7: 3,
+    5.8: 4,
+    5.9: 1,
+    6.0: 6,
+    6.1: 1,
+    6.2: 1,
+}
+
+
+def test_production_mb_histogram_recovers_the_live_b_value_and_flags_truncation() -> None:
+    magnitudes = [
+        magnitude for magnitude, count in _PRODUCTION_MB_HISTOGRAM.items() for _ in range(count)
+    ]
+    result = estimate_b_value(magnitudes, mc=4.97)
+    assert result.events_at_or_above_mc == 483
+    assert result.b_value == pytest.approx(2.131, abs=0.001)
+    assert result.b_value_standard_error == pytest.approx(0.098, abs=0.001)
+    assert result.diagnostics["max_magnitude_at_or_above_mc"] == pytest.approx(6.2)
+    assert result.diagnostics["magnitude_range_above_mc"] == pytest.approx(1.2)
+    assert result.diagnostics["limited_dynamic_range"] is True
+    assert result.diagnostics["unusual_b_value"] is True

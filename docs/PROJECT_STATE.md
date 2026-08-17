@@ -1,6 +1,6 @@
 # CHILE-OEF continuity and handoff log
 
-Last updated: 2026-08-16, America/Santiago
+Last updated: 2026-08-16 (b-value mb truncation finding), America/Santiago
 
 This file is the durable context for a new Claude/Codex session. Read it before
 editing. Keep it current. The chat history is not required to resume the project.
@@ -1007,11 +1007,11 @@ CLI/services, no new code:
   above: ComCat's own regional completeness for Chile is materially
   worse than CSN's denser network would give.
 - Gutenberg-Richter (Aki MLE): `b=2.13 (SE 0.098)` over 483 events at/above
-  Mc. Unusually high versus typical regional b~0.7-1.1 -- reported as the
-  real, uncalibrated MLE output over this specific window/magnitude-type
-  slice, not adjusted or investigated further (a real avenue for future
-  scrutiny -- e.g. binned-magnitude MLE correction -- explicitly not
-  attempted here, not hidden).
+  Mc. Unusually high versus typical regional b~0.7-1.1. Investigated the
+  same day (see the "mb saturation" section below): the 0.1-bin Utsu
+  correction was already in `estimate_b_value` and is not the cause. The
+  number is the correct MLE of an `mb` sample whose reporting ceiling is
+  6.2. It was not adjusted.
 - Declustering: 483 events classified, 183 background / 300 triggered.
 - Background rate: estimated over the real, full-scale production grid
   `chile_regular_0_1_v1` (90,000 cells) for the first time -- previously
@@ -1050,6 +1050,45 @@ evaluation against this real catalog cannot begin before real time has
 elapsed from today's ingestion moment forward**; this is not a gap to
 close with more code, it is what "prospective" actually requires, and the
 system correctly refuses to fake it.
+
+### mb saturation explains the production b-value of 2.13
+
+Added on 2026-08-16, Windows session after cloning `k4153r-max/chile-oef`
+to `C:\Users\Antonio\Desktop\Proyectos\chile-oef`. The production
+Gutenberg-Richter row was replicated independently from the live USGS
+FDSN service (same Chile box, same 2005-2015 window, same `mb` filter):
+16,103 events returned, 7,493 of them `mb` (matches the EMR
+`event_count`), Aki MLE at Mc=4.97 recovers **b=2.131 ± 0.098 over 483
+events** — identical to the persisted row. Script:
+`scripts/diagnose_b_value.py`. Write-up:
+`research/b_value_mb_truncation.md`.
+
+What the number is: `mb` in this sample **saturates at 6.2** (zero events
+`mb >= 6.5`). The 27F Maule Mw 8.8 is stored as `mww`. Above Mc=4.97 the
+usable range is 1.2 magnitude units and 200/483 events sit in the first
+0.1 bin. Mean magnitude 5.15 against an effective Aki origin of 4.95
+produces b≈2.13 by arithmetic, not by a missing binning correction (the
+Utsu `Δ/2` term was already applied). The same `mb` catalog at Mc=4.0
+gives the ordinary b=0.84. Moment-magnitude types in the same window sit
+near 0.5–1.1 at Mc=5, with their own opposite bias (they exist because
+the event was large).
+
+Load-bearing consequence: the live P7D forecast allocates ETAS rates
+across magnitude bins with this b-value, so `P(M≥7 | M≥5) = 10^(-2b)` is
+~5.5e-5 instead of ~0.01 at b=1. Large-event bins are understated. The
+dashboard now says so in plain language. The persisted row is not
+overwritten.
+
+Estimator change (does not rewrite the live number): `estimate_b_value`
+now records `max_magnitude_at_or_above_mc`, `magnitude_range_above_mc`,
+`limited_dynamic_range` (range < 1.5) and `unusual_b_value` (b outside
+0.5–1.5). Unit test
+`test_production_mb_histogram_recovers_the_live_b_value_and_flags_truncation`
+pins the 483-event histogram.
+
+Next honest slice, not done here: a **new** Gutenberg-Richter row + new
+forecast run on a registered moment-magnitude type, with its own Mc.
+CSN/POTIN stay `enabled: false`.
 
 ### First public read-only API + static dashboard, serving the real run above
 
@@ -1258,6 +1297,12 @@ The following should be done next, in this order:
     `csn_compiled_catalog` and `potin_1982_2020` remain deliberately
     `enabled: false` pending the license/contact review
     docs/data-sources.md requires -- not silently worked around.
+12. ~~Diagnose production b=2.13~~ -- done 2026-08-16 (see "mb saturation"
+    section above). **Next by default now**: issue a new Gutenberg-Richter
+    estimate and a new forecast run on a registered moment-magnitude type
+    (`mww`/`mwc`/a versioned conversion — not a silent mix into the `mb`
+    window). Keep the `mb` fit as the completeness result it is. Do not
+    overwrite the live row. CSN/POTIN still disabled.
 
 ## Known technical risks and decisions still to verify
 

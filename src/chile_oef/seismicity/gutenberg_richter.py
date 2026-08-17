@@ -5,6 +5,15 @@ from typing import Any
 
 from chile_oef.seismicity.completeness import CompletenessPolicy, _bin_magnitude, support_state
 
+# Flags, not refusals. Aki's MLE is still the number; these mark when that
+# number should not be read as a regional tectonic b-value. 1.5 magnitude
+# units is the span below which a 0.1-binned exponential is dominated by
+# the upper truncation of the reporting scale (see
+# research/b_value_mb_truncation.md). Typical interplate b is ~0.7-1.1.
+LIMITED_DYNAMIC_RANGE_MAGNITUDE = 1.5
+UNUSUAL_B_VALUE_LOW = 0.5
+UNUSUAL_B_VALUE_HIGH = 1.5
+
 
 @dataclass(frozen=True)
 class GutenbergRichterEstimate:
@@ -105,7 +114,13 @@ def estimate_b_value(
     variance_term = sum((m - mean_magnitude) ** 2 for m in events_at_or_above) / (n * (n - 1))
     standard_error = 2.30 * (b_value**2) * math.sqrt(variance_term)
     a_value = math.log10(n) + b_value * mc_binned
+    max_magnitude = max(events_at_or_above)
+    magnitude_range = max_magnitude - mc_binned
     diagnostics["mean_magnitude_at_or_above_mc"] = mean_magnitude
+    diagnostics["max_magnitude_at_or_above_mc"] = max_magnitude
+    diagnostics["magnitude_range_above_mc"] = round(magnitude_range, 10)
+    diagnostics["limited_dynamic_range"] = magnitude_range < LIMITED_DYNAMIC_RANGE_MAGNITUDE
+    diagnostics["unusual_b_value"] = b_value < UNUSUAL_B_VALUE_LOW or b_value > UNUSUAL_B_VALUE_HIGH
 
     return GutenbergRichterEstimate(
         event_count=len(magnitudes),
