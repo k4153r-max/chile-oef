@@ -1,6 +1,6 @@
 # CHILE-OEF continuity and handoff log
 
-Last updated: 2026-08-17 (city neighborhood readout), America/Santiago
+Last updated: 2026-08-17 (public page audit: status rail, method, USGS, SEO), America/Santiago
 
 This file is the durable context for a new Claude/Codex session. Read it before
 editing. Keep it current. The chat history is not required to resume the project.
@@ -1237,6 +1237,34 @@ web service).
   and homepage integration were rebuilt against the current live site
   content and design tokens before pushing -- `git rebase --abort` and a
   clean redo, not a forced overwrite of someone else's real work.
+
+### City neighborhood readout (places API)
+
+Added 2026-08-17. `GET /v1/forecasts/{id}/places` sums expected counts in
+cells whose centers lie within 40 km of a fixed Chilean city list, then
+returns Poisson P(N≥1) for the selected magnitude bin. This is a
+grid-neighborhood readout, not site-specific hazard and not an official
+risk number. The public page shows it as percent plus "1 en N".
+
+### Public page audit (forja-web, 2026-08-17)
+
+Implemented Phase 1 and the non-science slice of Phase 2 of the
+multidisciplinary audit of https://etemen.cl/chile-oef/ :
+
+- status rail (experimental / not an alert / no published prospective
+  test / live model / validity end);
+- four-step method diagram + long indexable method article;
+- five limitations + "Sin prueba prospectiva publicada";
+- CSN, SENAPRED, GitHub and API links on every view;
+- USGS last-30-day observed quakes as a toggleable map layer, plus a
+  24-month M–t canvas (observations, not forecasts);
+- forecast-run history table (live mwc run vs archived mb run);
+- zone ranking as multiples of the lowest-mass zone;
+- snapshot numbers baked into HTML; sitemap + JSON-LD Dataset/FAQ.
+
+Not done (still blocked, do not fake): CSN/POTIN ingest, prospective
+CSEP scores, parameter-uncertainty intervals, spatially varying
+background, 27F `available_at` reconstruction, ML, paid Postgres, OELF.
 
 ## Verified static data releases
 
