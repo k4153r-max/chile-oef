@@ -1,0 +1,33 @@
+name: Fit magnitude-type pipeline
+
+# Manual one-off: Mc → GR → decluster → background → ST-ETAS → forecast
+# for a single native magnitude type against the already-ingested catalog.
+# Does not backfill. Does not overwrite existing rows.
+# CHILE_OEF_DATABASE_URL must be a repository secret.
+on:
+  workflow_dispatch:
+    inputs:
+      magnitude_type:
+        description: Native USGS magnitude type (never mixed)
+        required: true
+        default: mwc
+
+jobs:
+  fit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CHILE_OEF_DATABASE_URL: ${{ secrets.CHILE_OEF_DATABASE_URL }}
+      CHILE_OEF_ENVIRONMENT: production
+      CHILE_OEF_FIT_MAGNITUDE_TYPE: ${{ inputs.magnitude_type }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install --upgrade pip && pip install .[dev]
+      - name: Apply migrations
+        run: alembic upgrade head
+      - name: Fit pipeline
+        run: python scripts/fit_magnitude_pipeline.py
