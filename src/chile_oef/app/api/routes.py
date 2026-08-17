@@ -17,6 +17,7 @@ from chile_oef.app.api.schemas import (
     EventRevisionResponse,
     ForecastCellResponse,
     ForecastMagnitudeBinResponse,
+    ForecastPlacesResponse,
     ForecastRunDetailResponse,
     ForecastRunListResponse,
     ForecastRunSummaryResponse,
@@ -24,6 +25,7 @@ from chile_oef.app.api.schemas import (
     HealthResponse,
     MagnitudeTypeCountResponse,
     NotableEventResponse,
+    PlaceForecastResponse,
     QualityFlagResponse,
     RawArtifactResponse,
     SeismicityModelSummaryResponse,
@@ -50,6 +52,12 @@ from chile_oef.db.models import (
 )
 from chile_oef.db.repositories.events import get_event_revisions, list_events
 from chile_oef.db.session import get_session
+from chile_oef.forecast.places import (
+    DEFAULT_RADIUS_KM,
+    PLACES,
+    bounding_box,
+    estimate_place,
+)
 from chile_oef.tectonics.slab2 import SlabRepository
 
 router = APIRouter()
@@ -558,6 +566,97 @@ def forecast_run_detail(
         selected_magnitude_lower=selected,
         cell_count_total=run.cell_count,
         cells=cells,
+    )
+
+
+def _selected_magnitude_lower(
+    run: ForecastRun, available_lowers: list[float], magnitude_lower: float | None
+) -> float:
+    if magnitude_lower is not None:
+        if magnitude_lower not in available_lowers:
+            raise HTTPException(
+                status_code=422, detail=f"magnitude_lower must be one of {available_lowers}"
+            )
+        return magnitude_lower
+    estimable_lowers = [lower for lower in available_lowers if lower >= run.reference_magnitude]
+    return estimable_lowers[0] if estimable_lowers else available_lowers[0]
+
+
+@router.get("/forecasts/{forecast_run_id}/places", response_model=ForecastPlacesResponse)
+def forecast_places(
+    forecast_run_id: uuid.UUID,
+    session: SessionDependency,
+    magnitude_lower: float | None = None,
+    radius_km: float = Query(default=DEFAULT_RADIUS_KM, ge=10, le=150),
+) -> ForecastPlacesResponse:
+    """City-neighborhood readout of an issued forecast.
+
+    Sums expected counts of estimable cells whose centers fall within
+    ``radius_km`` of each named city, then converts the sum to a Poisson
+    P(at least one). The number inherits the run's calibration_status; it
+    is not a calibrated civil-protection probability.
+    """
+    run = session.get(ForecastRun, forecast_run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="forecast run not found")
+    bin_rows = session.execute(
+        select(ForecastCellMagnitudeBin.magnitude_lower, ForecastCellMagnitudeBin.magnitude_upper)
+        .where(ForecastCellMagnitudeBin.forecast_run_id == run.id)
+        .distinct()
+        .order_by(ForecastCellMagnitudeBin.magnitude_lower)
+    ).all()
+    if not bin_rows:
+        raise HTTPException(status_code=404, detail="forecast run has no cell/bin rows")
+    available_lowers = [lower for lower, _upper in bin_rows]
+    selected = _selected_magnitude_lower(run, available_lowers, magnitude_lower)
+    selected_upper = next(upper for lower, upper in bin_rows if lower == selected)
+
+    places_out: list[PlaceForecastResponse] = []
+    for place in PLACES:
+        south, north, west, east = bounding_box(
+            float(place["latitude"]), float(place["longitude"]), radius_km
+        )
+        nearby = session.execute(
+            select(
+                SeismicCell.center_latitude,
+                SeismicCell.center_longitude,
+                ForecastCellMagnitudeBin.expected_count,
+            )
+            .join(SeismicCell, SeismicCell.id == ForecastCellMagnitudeBin.cell_id)
+            .where(
+                ForecastCellMagnitudeBin.forecast_run_id == run.id,
+                ForecastCellMagnitudeBin.magnitude_lower == selected,
+                ForecastCellMagnitudeBin.support_state == "estimable",
+                ForecastCellMagnitudeBin.expected_count.is_not(None),
+                SeismicCell.center_latitude.between(south, north),
+                SeismicCell.center_longitude.between(west, east),
+            )
+        ).all()
+        estimate = estimate_place(
+            [(lat, lon, expected) for lat, lon, expected in nearby],
+            place,
+            radius_km=radius_km,
+        )
+        places_out.append(
+            PlaceForecastResponse(
+                place_id=estimate.place_id,
+                name=estimate.name,
+                latitude=estimate.latitude,
+                longitude=estimate.longitude,
+                radius_km=estimate.radius_km,
+                cell_count=estimate.cell_count,
+                expected_count=estimate.expected_count,
+                probability_at_least_one=estimate.probability_at_least_one,
+            )
+        )
+
+    return ForecastPlacesResponse(
+        forecast_run_id=run.id,
+        magnitude_lower=selected,
+        magnitude_upper=selected_upper,
+        horizon_id=run.horizon_id,
+        calibration_status=run.calibration_status,
+        places=places_out,
     )
 
 

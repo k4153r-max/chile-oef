@@ -245,6 +245,27 @@ class ForecastRunDetailResponse(BaseModel):
     disclaimer: str = DISCLAIMER_ES
 
 
+class PlaceForecastResponse(BaseModel):
+    place_id: str
+    name: str
+    latitude: float
+    longitude: float
+    radius_km: float
+    cell_count: int
+    expected_count: float | None
+    probability_at_least_one: float | None
+
+
+class ForecastPlacesResponse(BaseModel):
+    forecast_run_id: uuid.UUID
+    magnitude_lower: float
+    magnitude_upper: float | None
+    horizon_id: str
+    calibration_status: str
+    places: list[PlaceForecastResponse]
+    disclaimer: str = DISCLAIMER_ES
+
+
 class SeismicityModelSummaryResponse(BaseModel):
     completeness_estimate_id: uuid.UUID
     mc_value: float

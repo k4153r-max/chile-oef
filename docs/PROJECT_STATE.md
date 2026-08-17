@@ -1,6 +1,6 @@
 # CHILE-OEF continuity and handoff log
 
-Last updated: 2026-08-16 (mwc production fit live), America/Santiago
+Last updated: 2026-08-17 (city neighborhood readout), America/Santiago
 
 This file is the durable context for a new Claude/Codex session. Read it before
 editing. Keep it current. The chat history is not required to resume the project.
