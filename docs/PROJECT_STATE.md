@@ -1,6 +1,6 @@
 # CHILE-OEF continuity and handoff log
 
-Last updated: 2026-08-16 (b-value mb truncation finding), America/Santiago
+Last updated: 2026-08-16 (mwc production fit live), America/Santiago
 
 This file is the durable context for a new Claude/Codex session. Read it before
 editing. Keep it current. The chat history is not required to resume the project.
@@ -1090,6 +1090,48 @@ Next honest slice, not done here: a **new** Gutenberg-Richter row + new
 forecast run on a registered moment-magnitude type, with its own Mc.
 CSN/POTIN stay `enabled: false`.
 
+### mwc production fit live (does not overwrite the mb row)
+
+Added 2026-08-16/17, Windows session. Local EMR+Aki on the 2005-2015
+USGS sample chose `mwc` as the only moment-magnitude type that is
+`supported` and not `limited_dynamic_range`:
+
+- EMR Mc = 4.9988 (CI 4.970–5.028), 545 events, `supported`
+- Aki b = 1.1215 ± 0.0479 over 505 events, range 2.7, max 7.7
+- `limited_dynamic_range=false`, `unusual_b_value=false`
+
+`mww` is `high_uncertainty` (n=177). `mwr` saturates at 5.5. Types were
+not mixed.
+
+GitHub Actions could not reach Render free Postgres (SSL closed;
+`ipAllowList` was empty = closed to the outside). One-off Render jobs
+are paid and rejected. Allowlist was opened to `0.0.0.0/0` for the
+duration of the fit, then closed again.
+
+`scripts/fit_magnitude_pipeline.py` ran locally against the hosted
+database. New append-only rows (mb rows untouched):
+
+| artifact | id |
+|---|---|
+| CompletenessEstimate (mwc EMR) | `6c24c39f-2127-49a6-b7ac-dbf683b4e0c8` |
+| GutenbergRichterEstimate | `e367d595-e335-43f2-b8ed-b123be80894a` |
+| Declustering | `bf5e4aec-f073-487d-822c-60f0fc15d17f` |
+| Background rate | `3687ee80-2cb7-45c9-a60d-286f37336550` |
+| Spatiotemporal ETAS (converged) | `5f076947-5373-4c57-b365-788f17b06c3f` |
+| ForecastRun P7D | `c29cd2b3-73de-4c60-92e7-afdd42c2da6f` |
+
+ETAS (mwc): μ=0.0097/day, k0=0.050, α=0.547, c=0.036d, p=0.882,
+d0=20.2 km, γ=0, q=1.52. Forecast valid until 2026-08-24T00:18Z,
+`uncalibrated_point_forecast`, b_value_used=1.1215. The public
+`/v1/seismicity/model-summary` and `/v1/forecasts` already serve this
+run (latest-created ETAS / latest forecast). The previous mb forecast
+`441d8637-…` remains in the table.
+
+Keep-alive: Cloudflare Worker `chile-oef-keepalive`, cron `* * * * *`,
+GET `https://chile-oef-api.onrender.com/v1/health`. Verified 200. Not a
+GitHub Actions ping (those bill per minute; same reason indago moved
+off Actions keepalive).
+
 ### First public read-only API + static dashboard, serving the real run above
 
 Added on 2026-08-16, same session, in response to a request to put this
@@ -1298,11 +1340,14 @@ The following should be done next, in this order:
     `enabled: false` pending the license/contact review
     docs/data-sources.md requires -- not silently worked around.
 12. ~~Diagnose production b=2.13~~ -- done 2026-08-16 (see "mb saturation"
-    section above). **Next by default now**: issue a new Gutenberg-Richter
-    estimate and a new forecast run on a registered moment-magnitude type
-    (`mww`/`mwc`/a versioned conversion — not a silent mix into the `mb`
-    window). Keep the `mb` fit as the completeness result it is. Do not
-    overwrite the live row. CSN/POTIN still disabled.
+    section above).
+13. ~~New Gutenberg-Richter + forecast on moment magnitude~~ -- done
+    2026-08-16/17 (see "mwc production fit" section above). **Next by
+    default now**: let prospective CSEP accumulate from the mwc forecast
+    issued 2026-08-17. CSN/POTIN still disabled. Do not mix magnitude
+    types. Keep-alive is the Cloudflare Worker `chile-oef-keepalive`
+    (minutely GET `/v1/health`). Render free Postgres expires
+    2026-09-15.
 
 ## Known technical risks and decisions still to verify
 

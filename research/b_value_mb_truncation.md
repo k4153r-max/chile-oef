@@ -76,7 +76,7 @@ probability product. That limitation is now also stated on
 
 ## Next honest slice
 
-Issue a **new** Gutenberg-Richter estimate (new row, new forecast run)
-on a registered moment-magnitude type, with its own Mc, and keep the
-`mb` fit as the catalog-completeness result it actually is. CSN remains
-`enabled: false` until the license review in `docs/data-sources.md`.
+Done 2026-08-17: new `mwc` EMR + Aki + ETAS + P7D forecast
+(`c29cd2b3-73de-4c60-92e7-afdd42c2da6f`), b=1.12, Mc=4.999. The `mb`
+row was not overwritten. CSN remains `enabled: false` until the license
+review in `docs/data-sources.md`.
