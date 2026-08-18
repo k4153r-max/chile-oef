@@ -11,7 +11,11 @@ import os
 import sys
 import urllib.parse
 import urllib.request
+from datetime import UTC, datetime
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
+
+CHILE_TZ = ZoneInfo("America/Santiago")
 
 DEFAULT_BOT_TOKEN = os.getenv("CHILE_OEF_TELEGRAM_BOT_TOKEN", "")
 DEFAULT_CHANNEL_ID = os.getenv("CHILE_OEF_TELEGRAM_CHANNEL_ID", "")
@@ -64,16 +68,22 @@ def format_anomaly_message(
     ias_index: float,
     prob_7d: float,
     baseline_prob: float,
+    event_time: datetime | None = None,
 ) -> str:
     """Format an anomaly alert in plain Spanish without technical jargon."""
     ratio = f"{ias_index:.1f} veces" if ias_index else "más alta"
     chance_str = function_format_chance(prob_7d)
     baseline_str = function_format_chance(baseline_prob)
+    when_line = ""
+    if event_time is not None:
+        local_time = event_time.astimezone(CHILE_TZ)
+        when_line = f"🕐 *Cuándo*: {local_time.strftime('%d-%m-%Y %H:%M')} hora de Chile\n"
 
     return (
         f"📊 *CHILE-OEF — Actualización Sísmica*\n\n"
         f"📍 *Zona*: {zone_name}\n"
-        f"⚡ *Sismo detectado*: Magnitud {event_mag:.1f} — {event_loc}\n\n"
+        f"⚡ *Sismo detectado*: Magnitud {event_mag:.1f} — {event_loc}\n"
+        f"{when_line}\n"
         f"❓ *¿Qué significa esta actividad?*\n"
         f"Debido al efecto de las réplicas, la actividad sísmica en esta zona está *{ratio} más alta* de lo normal para un día común.\n\n"
         f"🎲 *Probabilidad para los próximos 7 días*:\n"
@@ -191,6 +201,12 @@ def fetch_and_notify_new_events(
                 place = props.get("place", "Chile")
                 clean_place = place.replace("km of ", "km de ").replace("Chile", "").strip(" ,")
                 lat = feat.get("geometry", {}).get("coordinates", [0, 0])[1]
+                event_time_ms = props.get("time")
+                event_time = (
+                    datetime.fromtimestamp(event_time_ms / 1000, tz=UTC)
+                    if event_time_ms is not None
+                    else None
+                )
 
                 # Determine Zone
                 zone = "Zona Central"
@@ -212,6 +228,7 @@ def fetch_and_notify_new_events(
                     ias_index=2.5 + (mag - 5.0) * 1.2,
                     prob_7d=0.08 + (mag - 5.0) * 0.05,
                     baseline_prob=0.03,
+                    event_time=event_time,
                 )
                 if send_telegram_message(bot_token, chat_id, msg):
                     notified.add(event_id)
