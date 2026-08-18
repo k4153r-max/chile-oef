@@ -11,7 +11,7 @@ import os
 import sys
 import urllib.parse
 import urllib.request
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
@@ -160,9 +160,16 @@ def fetch_and_notify_new_events(
     chat_id: str,
     min_mag: float = 5.0,
     max_per_run: int = 3,
+    max_age_hours: float = 2.0,
 ) -> int:
-    """Fetch recent USGS events M>=min_mag in Chile and notify if new with anti-flood limit."""
+    """Fetch recent USGS events M>=min_mag in Chile and notify if new with anti-flood limit.
+
+    max_age_hours acota qué tan viejo puede ser un sismo para considerarse
+    'nuevo' -- sin esto, un evento nunca antes visto (p.ej. porque el
+    estado de notified_events.json se perdió) se notifica igual aunque
+    haya ocurrido hace semanas."""
     state_file = "data/notified_events.json"
+    min_time_ms = int((datetime.now(UTC) - timedelta(hours=max_age_hours)).timestamp() * 1000)
     notified = set()
     if os.path.exists(state_file):
         try:
@@ -193,6 +200,12 @@ def fetch_and_notify_new_events(
                     break
 
                 props = feat.get("properties", {})
+
+                event_time_ms = props.get("time")
+                if event_time_ms is not None and event_time_ms < min_time_ms:
+                    notified.add(event_id)
+                    continue
+
                 mag = props.get("mag", 0.0)
                 if mag < min_mag:
                     notified.add(event_id)

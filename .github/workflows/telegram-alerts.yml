@@ -32,12 +32,12 @@ jobs:
 
       - name: Persist notified-events state
         run: |
-          if ! git diff --quiet -- data/notified_events.json; then
+          if [ -n "$(git status --porcelain -- data/notified_events.json)" ]; then
             git config user.name "chile-oef-bot"
             git config user.email "actions@users.noreply.github.com"
             git add data/notified_events.json
             git commit -m "chore: actualizar estado de sismos notificados [skip ci]"
             git push
           else
-            echo "Sin sismos nuevos notificados en esta corrida."
+            echo "Sin cambios en el estado de sismos notificados en esta corrida."
           fi
