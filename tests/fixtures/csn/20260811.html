@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+  <head>
+            <meta charset="utf-8">
+    <meta name="description" content="Centro Sismológico Nacional">
+    <meta name="author" content="Centro Sismológico Nacional">
+    <title>Centro Sismológico Nacional</title>
+
+    <link rel="icon" type="image/x-icon" href="/img/favicon.ico" />
+    <link rel="stylesheet" href="/css/style.css?v=1.0">
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700" rel="stylesheet">
+
+    <script src="/js/dayjs.js"></script>
+    <script src="/js/dayjs-utc.js"></script>
+    <script src="/js/lib.js"></script>
+    <script src="/js/nav-script.js"></script>
+
+    <!--[if lt IE 9]>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.js"></script>
+    <![endif]-->
+
+
+    <link rel="stylesheet" href="/css/datepicker.css?v=1.0">
+    <script src="/js/datepicker.js"></script>
+    <script src="/js/datepicker-i18n-es.js"></script>
+    <script src="/js/picker.js"></script>
+  </head>
+  <body>
+    <div class="main-container">
+      <header>
+        <div class="inf">
+          <div id="logo-csn">
+            <a href="/index.html"><img src="/img/csn-logo.png" alt="Centro Sismológico Nacional"></a>
+          </div>
+          <a href="http://ingenieria.uchile.cl/" id="logo-fcfm" target="_blank"><img src="/img/logo-fcfm-header.png" alt="Facultad de Ciencias Físicas y Matemáticas - Universidad de Chile"></a>
+          <div id="switch">
+            <a href="http://www.csn.uchile.cl/"><i class="icon-info-circled"></i>Sitio institucional</a>
+          </div>
+          <div id="nav">
+            <nav>
+              <ul>
+ 
+                <li><a href="/index.html">Portada</a></li>
+                <li><a class="current" href="/sismicidad/sismos-por-dia.html">Sismicidad</a></li>
+                <li><a href="/informacion/glosario.html">Información</a></li>
+              </ul>
+            </nav>
+          </div>
+        </div>
+      </header>
+      <main id="page" class="full">
+        <section>
+          <ul>
+            <li><h1>Sismicidad:</h1></li>
+            <li><a class="current" href="sismos-por-dia.html">Sismos por día</a></li>
+            <li><a href="/sismicidad/mas-sobre-sismos.html">Más sobre sismos</a></li>
+          </ul>
+        </section>
+        <article>
+          <div class="bloque">
+            <table>
+              <tr>
+                <th class="icon-search"></th>
+                <td><input id="datepicker" type="text" name="datepicker" value="" size="40" placeholder="Fecha"></td>
+                <td colspan="4"><input id="search-button" type="submit" name="search-button" value="Buscar"></td>
+            </table>
+          </div>
+          <h2>Sismos por día</h2>
+	  <h1>Eventos del día <span class="dato">- El listado de sismos se efectúa por hora universal (UTC) <span class="footnote"><strong>(1)</strong></span></span></h1>
+          <table class="sismologia detalle">
+            <tr>
+              <th>Fecha Local / Lugar</th>
+              <th>Fecha UTC</th>
+              <th>Latitud / Longitud</th>
+              <th>Profundidad</th>
+              <th>Magnitud<span class="footnote"><strong> (2)</strong></span></th>
+            </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/08/378880.html">2026-08-11 19:27:16</a><br>36 km al O de Ollagüe</td>
+              <td>2026-08-11 23:27:16</td>
+              <td>-21.263<br> -68.601</td>
+              <td>124 km</td>
+              <td class="magnitud">2.5 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/08/378877.html">2026-08-11 18:38:29</a><br>38 km al SO de Mina Collahuasi</td>
+              <td>2026-08-11 22:38:29</td>
+              <td>-21.136<br> -68.812</td>
+              <td>114 km</td>
+              <td class="magnitud">2.9 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/08/378876.html">2026-08-11 18:17:50</a><br>53 km al S de Putre</td>
+              <td>2026-08-11 22:17:50</td>
+              <td>-18.662<br> -69.651</td>
+              <td>105 km</td>
+              <td class="magnitud">3.1 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/08/378865.html">2026-08-11 16:22:46</a><br>23 km al NO de Quintero</td>
+              <td>2026-08-11 20:22:46</td>
+              <td>-32.664<br> -71.735</td>
+              <td>12 km</td>
+              <td class="magnitud">2.5 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/08/378861.html">2026-08-11 16:07:11</a><br>29 km al NO de Quintero</td>
+              <td>2026-08-11 20:07:11</td>
+              <td>-32.659<br> -71.801</td>
+              <td>24 km</td>
+              <td class="magnitud">2.9 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/08/378846.html">2026-08-11 14:24:47</a><br>37 km al NE de Pica</td>
+              <td>2026-08-11 18:24:47</td>
+              <td>-20.323<br> -69.025</td>
+              <td>108 km</td>
+              <td class="magnitud">3.3 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/08/378843.html">2026-08-11 14:06:01</a><br>54 km al SO de Mina Collahuasi</td>
+              <td>2026-08-11 18:06:01</td>
+              <td>-21.119<br> -69.075</td>
+              <td>112 km</td>
+              <td class="magnitud">2.9 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/08/378830.html">2026-08-11 11:00:48</a><br>18 km al SE de San Pedro de Atacama</td>
+              <td>2026-08-11 15:00:48</td>
+              <td>-23.060<br> -68.105</td>
+              <td>234 km</td>
+              <td class="magnitud">3.1 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/08/378824.html">2026-08-11 09:29:52</a><br>20 km al NO de Quintero</td>
+              <td>2026-08-11 13:29:52</td>
+              <td>-32.694<br> -71.719</td>
+              <td>20 km</td>
+              <td class="magnitud">2.9 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/08/378810.html">2026-08-11 06:43:32</a><br>35 km al SO de Pichidangui</td>
+              <td>2026-08-11 10:43:32</td>
+              <td>-32.351<br> -71.795</td>
+              <td>26 km</td>
+              <td class="magnitud">2.6 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/08/378809.html">2026-08-11 06:20:54</a><br>44 km al SO de Huasco</td>
+              <td>2026-08-11 10:20:54</td>
+              <td>-28.817<br> -71.420</td>
+              <td>31 km</td>
+              <td class="magnitud">2.9 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/08/378793.html">2026-08-11 01:47:35</a><br>24 km al NO de Quintero</td>
+              <td>2026-08-11 05:47:35</td>
+              <td>-32.628<br> -71.719</td>
+              <td>30 km</td>
+              <td class="magnitud">3.3 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/08/378783.html">2026-08-10 23:31:14</a><br>75 km al NO de San Antonio de los Cobres</td>
+              <td>2026-08-11 03:31:14</td>
+              <td>-23.914<br> -66.975</td>
+              <td>292 km</td>
+              <td class="magnitud">3.6 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/08/378782.html">2026-08-10 23:16:03</a><br>59 km al SO de Ollagüe</td>
+              <td>2026-08-11 03:16:03</td>
+              <td>-21.700<br> -68.514</td>
+              <td>157 km</td>
+              <td class="magnitud">2.9 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/08/378781.html">2026-08-10 22:02:04</a><br>48 km al SO de Huasco</td>
+              <td>2026-08-11 02:02:04</td>
+              <td>-28.804<br> -71.534</td>
+              <td>26 km</td>
+              <td class="magnitud">2.9 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/08/378778.html">2026-08-10 21:40:12</a><br>49 km al S de Pica</td>
+              <td>2026-08-11 01:40:12</td>
+              <td>-20.924<br> -69.265</td>
+              <td>117 km</td>
+              <td class="magnitud">2.7 Mlv</td>
+              </tr>
+            <tr class="percibido">
+              <td><a href="/sismicidad/informes/2026/08/378776.html">2026-08-10 20:31:19</a><br>26 km al E de Caldera</td>
+              <td>2026-08-11 00:31:19</td>
+              <td>-26.989<br> -70.576</td>
+              <td>73 km</td>
+              <td class="magnitud">3.8 Mlv</td>
+              </tr>
+          </table>
+
+          <br>
+
+          <h1>Notas</h1>
+          <p><span class="footnote"><strong>(1)</strong></span>Los sismos reportados como percibidos son presentados en <strong>negrita</strong> y tienen un vínculo al reporte de intensidades.</p>
+          <p><span class="footnote"><strong>(2)</strong></span>El CSN publica principalmente los siguientes tipos de magnitudes:</p>
+          <ul>
+            <li><strong>Ml (Magnitud local):</strong> en sismos de baja magnitud.</li>
+            <li><strong>Mw (Magnitud de momento, con modelo de Brüne):</strong> en sismos de mediana magnitud.</li>
+            <li><strong>Mww (Magnitud de momento, con Fase W):</strong> en sismos de gran magnitud.</li>
+          </ul>
+          <a href="/informacion/preguntas-frecuentes.html#5" class="boton">Más información</a>
+        </article>
+      </main>
+    </div>
+    <!-- Footer 1 -->
+    <footer>
+        <div id="page">
+          <aside class="widget widget_text">
+            <div class="textwidget"><i class="icon-link-ext"></i><strong>Enlaces relacionados: </strong>
+              <a href="http://shakemaps.csn.uchile.cl" target="_blank">Shakemap</a>
+              <a href="http://www.csn.uchile.cl/focalmechanism/" target="_blank">Tensor de Momento</a>
+              <a href="http://evtdb.csn.uchile.cl" target="_blank">Registros de Aceleración</a>
+              <a href="http://gps.csn.uchile.cl" target="_blank">Registros GNSS</a>
+              <a href="http://www.senapred.cl" target="_blank">SENAPRED</a>
+              <a href="http://www.shoa.cl" target="_blank">SHOA</a>
+              <a href="https://www.uchile.cl" target="_blank">U. de Chile</a>
+              <a href="http://ingenieria.uchile.cl" target="_blank">FCFM</a>
+            </div>
+          </aside>
+        </div>
+    </footer>
+    <!-- End Footer 1 -->
+
+    <!-- Footer 2 -->
+    <footer class="dos">
+      <div id="page">
+        <ul class="mbl">
+          <li>
+    	    <a href="http://www.csn.uchile.cl/" class="icon-info-circled">Sitio institucional</a>
+          </li>
+        </ul>
+        <ul>
+          <li>
+            <a href="http://www.csn.uchile.cl/">Centro Sismológico Nacional,<br class="d-none"> Universidad de Chile</a>
+    	    <p>Beauchef 850, Santiago | Central: +562 29784000</p>
+          </li>
+          <li class="d-none">
+    	    <a href="http://ingenieria.uchile.cl/" id="logo-fcfm2" target="_blank">
+              <img src="/img/logo-fcfm-header.png" alt="Facultad de Ciencias Físicas y Matemáticas - Universidad de Chile">
+    	    </a>
+          </li>
+          <li>
+            <img src="/img/iso9001.png" alt="Certificación ISO 9001">
+          </li>
+          <li>
+    	    <div>
+    	      <a id="facebook" href="https://www.facebook.com/pages/Centro-Sismol%C3%B3gico-Nacional-Universidad-de-Chile/195079254010666?fref=ts" target="_blank"><i class=" icon-facebook"></i></a><a id="twitter" href="https://twitter.com/sismos_UCHILE" target="_blank"><i class="icon-twitter"></i></a><a id="youtube" href="http://www.youtube.com/channel/UCgtq2w1ndVLAE9jWQvIS8Mw" target="_blank"><i class="icon-youtube-play"></i></a><a id="instagram" href="https://www.instagram.com/sismos_csn/" target="_blank"><i class="icon-instagram"></i></a>
+    	    </div>
+    	    <div>
+              <a href="//www.csn.uchile.cl/contacto/publico-general">Contacto</a> | <a href="/accesos/nosotros.html">Nosotros</a> | <a href="/accesos/uso-de-datos.html">Uso de datos</a>
+    	    </div>
+          </li>
+        </ul>
+      </div>
+    </footer>
+    <!-- End Footer 2 -->
+  </body>
+</html>

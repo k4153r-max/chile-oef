@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+  <head>
+            <meta charset="utf-8">
+    <meta name="description" content="Centro Sismológico Nacional">
+    <meta name="author" content="Centro Sismológico Nacional">
+    <title>Centro Sismológico Nacional</title>
+
+    <link rel="icon" type="image/x-icon" href="/img/favicon.ico" />
+    <link rel="stylesheet" href="/css/style.css?v=1.0">
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700" rel="stylesheet">
+
+    <script src="/js/dayjs.js"></script>
+    <script src="/js/dayjs-utc.js"></script>
+    <script src="/js/lib.js"></script>
+    <script src="/js/nav-script.js"></script>
+
+    <!--[if lt IE 9]>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.js"></script>
+    <![endif]-->
+
+
+    <link rel="stylesheet" href="/css/datepicker.css?v=1.0">
+    <script src="/js/datepicker.js"></script>
+    <script src="/js/datepicker-i18n-es.js"></script>
+    <script src="/js/picker.js"></script>
+  </head>
+  <body>
+    <div class="main-container">
+      <header>
+        <div class="inf">
+          <div id="logo-csn">
+            <a href="/index.html"><img src="/img/csn-logo.png" alt="Centro Sismológico Nacional"></a>
+          </div>
+          <a href="http://ingenieria.uchile.cl/" id="logo-fcfm" target="_blank"><img src="/img/logo-fcfm-header.png" alt="Facultad de Ciencias Físicas y Matemáticas - Universidad de Chile"></a>
+          <div id="switch">
+            <a href="http://www.csn.uchile.cl/"><i class="icon-info-circled"></i>Sitio institucional</a>
+          </div>
+          <div id="nav">
+            <nav>
+              <ul>
+ 
+                <li><a href="/index.html">Portada</a></li>
+                <li><a class="current" href="/sismicidad/sismos-por-dia.html">Sismicidad</a></li>
+                <li><a href="/informacion/glosario.html">Información</a></li>
+              </ul>
+            </nav>
+          </div>
+        </div>
+      </header>
+      <main id="page" class="full">
+        <section>
+          <ul>
+            <li><h1>Sismicidad:</h1></li>
+            <li><a class="current" href="sismos-por-dia.html">Sismos por día</a></li>
+            <li><a href="/sismicidad/mas-sobre-sismos.html">Más sobre sismos</a></li>
+          </ul>
+        </section>
+        <article>
+          <div class="bloque">
+            <table>
+              <tr>
+                <th class="icon-search"></th>
+                <td><input id="datepicker" type="text" name="datepicker" value="" size="40" placeholder="Fecha"></td>
+                <td colspan="4"><input id="search-button" type="submit" name="search-button" value="Buscar"></td>
+            </table>
+          </div>
+          <h2>Sismos por día</h2>
+	  <h1>Eventos del día <span class="dato">- El listado de sismos se efectúa por hora universal (UTC) <span class="footnote"><strong>(1)</strong></span></span></h1>
+          <table class="sismologia detalle">
+            <tr>
+              <th>Fecha Local / Lugar</th>
+              <th>Fecha UTC</th>
+              <th>Latitud / Longitud</th>
+              <th>Profundidad</th>
+              <th>Magnitud<span class="footnote"><strong> (2)</strong></span></th>
+            </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375387.html">2026-07-18 16:49:57</a><br>13 km al SO de Mina Collahuasi</td>
+              <td>2026-07-18 20:49:57</td>
+              <td>-20.922<br> -68.731</td>
+              <td>116 km</td>
+              <td class="magnitud">2.5 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375384.html">2026-07-18 16:36:09</a><br>38 km al O de Quintero</td>
+              <td>2026-07-18 20:36:09</td>
+              <td>-32.676<br> -71.909</td>
+              <td>25 km</td>
+              <td class="magnitud">3.4 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375381.html">2026-07-18 16:04:00</a><br>53 km al SO de Mina Collahuasi</td>
+              <td>2026-07-18 20:04:00</td>
+              <td>-21.213<br> -68.964</td>
+              <td>123 km</td>
+              <td class="magnitud">2.5 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375379.html">2026-07-18 15:57:27</a><br>36 km al O de Quintero</td>
+              <td>2026-07-18 19:57:27</td>
+              <td>-32.660<br> -71.889</td>
+              <td>22 km</td>
+              <td class="magnitud">3.3 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375377.html">2026-07-18 15:50:44</a><br>443 km al E de Base Frei</td>
+              <td>2026-07-18 19:50:44</td>
+              <td>-60.400<br> -51.560</td>
+              <td>30 km</td>
+              <td class="magnitud">5.7 Mww</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375370.html">2026-07-18 15:13:17</a><br>67 km al SE de Socaire</td>
+              <td>2026-07-18 19:13:17</td>
+              <td>-24.054<br> -67.466</td>
+              <td>193 km</td>
+              <td class="magnitud">2.8 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375363.html">2026-07-18 14:13:38</a><br>21 km al SE de Curicó</td>
+              <td>2026-07-18 18:13:38</td>
+              <td>-35.128<br> -71.092</td>
+              <td>97 km</td>
+              <td class="magnitud">3.1 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375349.html">2026-07-18 12:31:27</a><br>121 km al O de Caldera</td>
+              <td>2026-07-18 16:31:27</td>
+              <td>-26.994<br> -72.040</td>
+              <td>10 km</td>
+              <td class="magnitud">3.7 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375346.html">2026-07-18 12:07:22</a><br>32 km al E de Cauquenes</td>
+              <td>2026-07-18 16:07:22</td>
+              <td>-36.034<br> -71.974</td>
+              <td>76 km</td>
+              <td class="magnitud">3.0 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375340.html">2026-07-18 11:00:11</a><br>90 km al NO de San Antonio de los Cobres</td>
+              <td>2026-07-18 15:00:11</td>
+              <td>-23.709<br> -67.006</td>
+              <td>216 km</td>
+              <td class="magnitud">3.2 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375334.html">2026-07-18 10:21:00</a><br>56 km al N de Camiña</td>
+              <td>2026-07-18 14:21:00</td>
+              <td>-18.808<br> -69.406</td>
+              <td>99 km</td>
+              <td class="magnitud">2.9 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375329.html">2026-07-18 09:36:56</a><br>53 km al N de Camiña</td>
+              <td>2026-07-18 13:36:56</td>
+              <td>-18.843<br> -69.324</td>
+              <td>107 km</td>
+              <td class="magnitud">2.6 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375319.html">2026-07-18 07:04:36</a><br>57 km al SO de Ollagüe</td>
+              <td>2026-07-18 11:04:36</td>
+              <td>-21.605<br> -68.625</td>
+              <td>134 km</td>
+              <td class="magnitud">3.0 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375318.html">2026-07-18 06:55:05</a><br>131 km al O de Valdivia</td>
+              <td>2026-07-18 10:55:05</td>
+              <td>-39.412<br> -74.687</td>
+              <td>7 km</td>
+              <td class="magnitud">2.8 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375316.html">2026-07-18 06:30:45</a><br>30 km al SE de Concepción</td>
+              <td>2026-07-18 10:30:45</td>
+              <td>-36.990<br> -72.787</td>
+              <td>40 km</td>
+              <td class="magnitud">2.8 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375315.html">2026-07-18 06:28:55</a><br>39 km al S de Ollagüe</td>
+              <td>2026-07-18 10:28:55</td>
+              <td>-21.568<br> -68.183</td>
+              <td>142 km</td>
+              <td class="magnitud">2.5 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375313.html">2026-07-18 06:23:08</a><br>43 km al S de Pozo Almonte</td>
+              <td>2026-07-18 10:23:08</td>
+              <td>-20.638<br> -69.732</td>
+              <td>94 km</td>
+              <td class="magnitud">2.5 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375311.html">2026-07-18 05:55:34</a><br>34 km al S de Huasco</td>
+              <td>2026-07-18 09:55:34</td>
+              <td>-28.770<br> -71.284</td>
+              <td>30 km</td>
+              <td class="magnitud">2.8 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375307.html">2026-07-18 05:02:36</a><br>83 km al E de Socaire</td>
+              <td>2026-07-18 09:02:36</td>
+              <td>-23.704<br> -67.082</td>
+              <td>224 km</td>
+              <td class="magnitud">3.3 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375303.html">2026-07-18 04:37:50</a><br>13 km al O de Quintero</td>
+              <td>2026-07-18 08:37:50</td>
+              <td>-32.735<br> -71.658</td>
+              <td>24 km</td>
+              <td class="magnitud">2.5 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375300.html">2026-07-18 04:30:54</a><br>16 km al O de Quintero</td>
+              <td>2026-07-18 08:30:54</td>
+              <td>-32.741<br> -71.690</td>
+              <td>27 km</td>
+              <td class="magnitud">2.8 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375296.html">2026-07-18 03:54:08</a><br>48 km al O de Mina Collahuasi</td>
+              <td>2026-07-18 07:54:08</td>
+              <td>-20.886<br> -69.117</td>
+              <td>110 km</td>
+              <td class="magnitud">2.7 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375293.html">2026-07-18 03:41:07</a><br>37 km al O de El Tabo</td>
+              <td>2026-07-18 07:41:07</td>
+              <td>-33.329<br> -72.034</td>
+              <td>25 km</td>
+              <td class="magnitud">2.5 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375290.html">2026-07-18 02:45:08</a><br>25 km al NO de Mina Collahuasi</td>
+              <td>2026-07-18 06:45:08</td>
+              <td>-20.656<br> -68.819</td>
+              <td>119 km</td>
+              <td class="magnitud">3.5 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375286.html">2026-07-18 02:36:57</a><br>48 km al O de El Tabo</td>
+              <td>2026-07-18 06:36:57</td>
+              <td>-33.297<br> -72.150</td>
+              <td>36 km</td>
+              <td class="magnitud">4.0 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375278.html">2026-07-18 00:43:08</a><br>79 km al NO de San Antonio de los Cobres</td>
+              <td>2026-07-18 04:43:08</td>
+              <td>-23.904<br> -67.017</td>
+              <td>204 km</td>
+              <td class="magnitud">3.1 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375277.html">2026-07-18 00:36:31</a><br>30 km al NE de Pica</td>
+              <td>2026-07-18 04:36:31</td>
+              <td>-20.242<br> -69.218</td>
+              <td>101 km</td>
+              <td class="magnitud">3.2 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375275.html">2026-07-18 00:19:18</a><br>123 km al O de Pichilemu</td>
+              <td>2026-07-18 04:19:18</td>
+              <td>-33.991<br> -73.259</td>
+              <td>28 km</td>
+              <td class="magnitud">2.7 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375272.html">2026-07-17 23:54:53</a><br>62 km al S de Mina Collahuasi</td>
+              <td>2026-07-18 03:54:53</td>
+              <td>-21.357<br> -68.858</td>
+              <td>122 km</td>
+              <td class="magnitud">2.5 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375270.html">2026-07-17 23:34:42</a><br>32 km al SO de Camiña</td>
+              <td>2026-07-18 03:34:42</td>
+              <td>-19.553<br> -69.594</td>
+              <td>80 km</td>
+              <td class="magnitud">3.2 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375255.html">2026-07-17 22:17:19</a><br>82 km al SE de Socaire</td>
+              <td>2026-07-18 02:17:19</td>
+              <td>-24.074<br> -67.285</td>
+              <td>180 km</td>
+              <td class="magnitud">2.9 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375253.html">2026-07-17 21:53:26</a><br>16 km al NO de Punta de Choros</td>
+              <td>2026-07-18 01:53:26</td>
+              <td>-29.130<br> -71.555</td>
+              <td>38 km</td>
+              <td class="magnitud">2.5 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375252.html">2026-07-17 21:24:13</a><br>73 km al NO de San Antonio de los Cobres</td>
+              <td>2026-07-18 01:24:13</td>
+              <td>-23.893<br> -66.936</td>
+              <td>208 km</td>
+              <td class="magnitud">2.5 Mlv</td>
+              </tr>
+            <tr>
+              <td><a href="/sismicidad/informes/2026/07/375248.html">2026-07-17 20:25:19</a><br>35 km al O de San Pedro de Atacama</td>
+              <td>2026-07-18 00:25:19</td>
+              <td>-22.839<br> -68.532</td>
+              <td>87 km</td>
+              <td class="magnitud">3.1 Mlv</td>
+              </tr>
+          </table>
+
+          <br>
+
+          <h1>Notas</h1>
+          <p><span class="footnote"><strong>(1)</strong></span>Los sismos reportados como percibidos son presentados en <strong>negrita</strong> y tienen un vínculo al reporte de intensidades.</p>
+          <p><span class="footnote"><strong>(2)</strong></span>El CSN publica principalmente los siguientes tipos de magnitudes:</p>
+          <ul>
+            <li><strong>Ml (Magnitud local):</strong> en sismos de baja magnitud.</li>
+            <li><strong>Mw (Magnitud de momento, con modelo de Brüne):</strong> en sismos de mediana magnitud.</li>
+            <li><strong>Mww (Magnitud de momento, con Fase W):</strong> en sismos de gran magnitud.</li>
+          </ul>
+          <a href="/informacion/preguntas-frecuentes.html#5" class="boton">Más información</a>
+        </article>
+      </main>
+    </div>
+    <!-- Footer 1 -->
+    <footer>
+        <div id="page">
+          <aside class="widget widget_text">
+            <div class="textwidget"><i class="icon-link-ext"></i><strong>Enlaces relacionados: </strong>
+              <a href="http://shakemaps.csn.uchile.cl" target="_blank">Shakemap</a>
+              <a href="http://www.csn.uchile.cl/focalmechanism/" target="_blank">Tensor de Momento</a>
+              <a href="http://evtdb.csn.uchile.cl" target="_blank">Registros de Aceleración</a>
+              <a href="http://gps.csn.uchile.cl" target="_blank">Registros GNSS</a>
+              <a href="http://www.senapred.cl" target="_blank">SENAPRED</a>
+              <a href="http://www.shoa.cl" target="_blank">SHOA</a>
+              <a href="https://www.uchile.cl" target="_blank">U. de Chile</a>
+              <a href="http://ingenieria.uchile.cl" target="_blank">FCFM</a>
+            </div>
+          </aside>
+        </div>
+    </footer>
+    <!-- End Footer 1 -->
+
+    <!-- Footer 2 -->
+    <footer class="dos">
+      <div id="page">
+        <ul class="mbl">
+          <li>
+    	    <a href="http://www.csn.uchile.cl/" class="icon-info-circled">Sitio institucional</a>
+          </li>
+        </ul>
+        <ul>
+          <li>
+            <a href="http://www.csn.uchile.cl/">Centro Sismológico Nacional,<br class="d-none"> Universidad de Chile</a>
+    	    <p>Beauchef 850, Santiago | Central: +562 29784000</p>
+          </li>
+          <li class="d-none">
+    	    <a href="http://ingenieria.uchile.cl/" id="logo-fcfm2" target="_blank">
+              <img src="/img/logo-fcfm-header.png" alt="Facultad de Ciencias Físicas y Matemáticas - Universidad de Chile">
+    	    </a>
+          </li>
+          <li>
+            <img src="/img/iso9001.png" alt="Certificación ISO 9001">
+          </li>
+          <li>
+    	    <div>
+    	      <a id="facebook" href="https://www.facebook.com/pages/Centro-Sismol%C3%B3gico-Nacional-Universidad-de-Chile/195079254010666?fref=ts" target="_blank"><i class=" icon-facebook"></i></a><a id="twitter" href="https://twitter.com/sismos_UCHILE" target="_blank"><i class="icon-twitter"></i></a><a id="youtube" href="http://www.youtube.com/channel/UCgtq2w1ndVLAE9jWQvIS8Mw" target="_blank"><i class="icon-youtube-play"></i></a><a id="instagram" href="https://www.instagram.com/sismos_csn/" target="_blank"><i class="icon-instagram"></i></a>
+    	    </div>
+    	    <div>
+              <a href="//www.csn.uchile.cl/contacto/publico-general">Contacto</a> | <a href="/accesos/nosotros.html">Nosotros</a> | <a href="/accesos/uso-de-datos.html">Uso de datos</a>
+    	    </div>
+          </li>
+        </ul>
+      </div>
+    </footer>
+    <!-- End Footer 2 -->
+  </body>
+</html>
