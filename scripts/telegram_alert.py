@@ -82,7 +82,7 @@ def format_anomaly_message(
         f"🎲 *Probabilidad para los próximos 7 días*:\n"
         f"Hay un *{chance_str} de posibilidad* de que ocurra otro sismo de magnitud 5.0 o superior en esta misma zona. (Lo habitual en una semana normal es {baseline_str}).\n\n"
         f"💡 *Recomendación*:\n"
-        f"Mantén la calma. Recuerda revisar tu kit de emergencia y seguir siempre la información oficial del [CSN](https://www.csn.uchile.cl/) y [SENAPRED](https://www.senapred.cl/).\n\n"
+        f"Mantén la calma. Recuerda revisar tu kit de emergencia y seguir siempre la información oficial del *CSN* y *SENAPRED*.\n\n"
         f"🌐 [Ver informe completo en etemen.cl/chile-oef/](https://etemen.cl/chile-oef/)"
     )
 
@@ -100,7 +100,7 @@ def format_weekly_bulletin(
         f"• *Sismos registrados en Chile*: {total_events} sismos de magnitud 4.0 o superior.\n"
         f"• *Zona de mayor actividad*: {top_region}.\n"
         f"• *Comportamiento*: La actividad nacional se mantiene dentro de los márgenes normales esperados para nuestro país.\n\n"
-        f"ℹ️ _Información estadística para comprender la sismicidad en Chile. No predice terremotos. Fuentes oficiales: [CSN](https://www.csn.uchile.cl/) y [SENAPRED](https://www.senapred.cl/)._\n\n"
+        f"ℹ️ _Información estadística para comprender la sismicidad en Chile. No predice terremotos. Fuentes oficiales: CSN y SENAPRED._\n\n"
         f"🌐 [Ver informe completo en etemen.cl/chile-oef/](https://etemen.cl/chile-oef/)"
     )
 
