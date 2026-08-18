@@ -105,6 +105,49 @@ def format_weekly_bulletin(
     )
 
 
+def format_emergency_kit() -> str:
+    """Format emergency kit checklist for Telegram."""
+    return (
+        "🧰 *CHILE-OEF — Kit de Emergencia Familiar en Chile*\n\n"
+        "En un país sísmico como el nuestro, estar preparados en casa es la mejor medida. Lista básica recomendada por organismos oficiales:\n\n"
+        "💧 *1. Agua potable*: 3 litros por persona al día (mínimo para 3 días).\n"
+        "🔦 *2. Linterna y radio*: A pilas o manivela con pilas de repuesto.\n"
+        "🥫 *3. Alimentos no perecibles*: Enlatados, barras de cereal y abrelatas manual.\n"
+        "💊 *4. Botiquín básico*: Alcohol, gasas, vendas y medicamentos de uso continuo.\n"
+        "📄 *5. Documentos y llaves*: Copia de carnet de identidad, llaves de casa y silbato.\n"
+        "🤝 *6. Plan familiar*: Punto de encuentro acordado sin depender de red celular.\n\n"
+        "ℹ️ _Recomendaciones oficiales de prevención. Fuentes: CSN y SENAPRED._\n\n"
+        "🌐 [Ver informe y checklist completo en etemen.cl/chile-oef/](https://etemen.cl/chile-oef/#preparacion)"
+    )
+
+
+def format_myths_and_reality() -> str:
+    """Format myths vs reality message for Telegram."""
+    return (
+        "📖 *CHILE-OEF — Mitos vs. Realidad de los Sismos*\n\n"
+        "❌ *Mito: 'El calor produce terremotos'*\n"
+        "✅ *Realidad*: El clima solo afecta los primeros metros de suelo. Las placas tectónicas rozan a más de 30 km de profundidad.\n\n"
+        "❌ *Mito: 'Es mejor que tiemble despacio para liberar energía'*\n"
+        "✅ *Realidad*: La magnitud es logarítmica (factor 32x). Se necesitan 32 temblores M5.0 para igualar la energía de un solo M6.0.\n\n"
+        "❌ *Mito: 'Los animales sienten los temblores minutos antes'*\n"
+        "✅ *Realidad*: Sienten las Ondas P (imperceptibles) segundos antes de las Ondas S (zamarreo principal).\n\n"
+        "🌐 [Ver más explicaciones en etemen.cl/chile-oef/](https://etemen.cl/chile-oef/#mitos)"
+    )
+
+
+def format_historic_timeline() -> str:
+    """Format historic earthquakes timeline for Telegram."""
+    return (
+        "📜 *CHILE-OEF — Grandes Terremotos de Chile*\n\n"
+        "🇨🇱 *1960 — Valdivia (M 9.5)*: El sismo más grande registrado en la historia mundial. Reestructuró la tectónica moderna.\n\n"
+        "🇨🇱 *1985 — Valparaíso (M 8.0)*: Impulsó la norma sismorresistente NCh433 en la edificación chilena.\n\n"
+        "🇨🇱 *2010 — Maule 27F (M 8.8)*: Ruptura de 500 km de costa. Renovó la red de monitoreo del CSN.\n\n"
+        "🇨🇱 *2014 — Iquique (M 8.2)*: Precedido por 2 semanas de sismos precursores (foreshocks).\n\n"
+        "🇨🇱 *2015 — Illapel (M 8.3)*: Alta secuencia de réplicas inmediatas en la Región de Coquimbo.\n\n"
+        "🌐 [Ver historia completa en etemen.cl/chile-oef/](https://etemen.cl/chile-oef/#historia)"
+    )
+
+
 def fetch_and_notify_new_events(
     bot_token: str,
     chat_id: str,
@@ -194,6 +237,9 @@ def main():
     parser.add_argument("--chat-id", default=DEFAULT_CHANNEL_ID, help="Telegram Chat ID or @channel_name")
     parser.add_argument("--test", action="store_true", help="Send a test message")
     parser.add_argument("--weekly", action="store_true", help="Send weekly bulletin")
+    parser.add_argument("--kit", action="store_true", help="Send emergency kit checklist")
+    parser.add_argument("--mitos", action="store_true", help="Send myths vs reality post")
+    parser.add_argument("--historia", action="store_true", help="Send historic earthquakes timeline")
     parser.add_argument("--poll", action="store_true", help="Check USGS and notify new events M>=min_mag")
     parser.add_argument("--min-mag", type=float, default=5.0, help="Minimum magnitude threshold (default 5.0)")
     parser.add_argument("--message", help="Custom text message to send")
@@ -218,6 +264,27 @@ def main():
             print("[ÉXITO] Boletín semanal enviado.")
         else:
             print("[FALLO] Error al enviar boletín semanal.")
+    elif args.kit:
+        print(f"[INFO] Enviando Kit de Emergencia a {args.chat_id}...")
+        ok = send_telegram_message(args.token, args.chat_id, format_emergency_kit())
+        if ok:
+            print("[ÉXITO] Kit de emergencia enviado.")
+        else:
+            print("[FALLO] Error al enviar Kit de emergencia.")
+    elif args.mitos:
+        print(f"[INFO] Enviando Mitos vs Realidad a {args.chat_id}...")
+        ok = send_telegram_message(args.token, args.chat_id, format_myths_and_reality())
+        if ok:
+            print("[ÉXITO] Mitos vs Realidad enviado.")
+        else:
+            print("[FALLO] Error al enviar Mitos vs Realidad.")
+    elif args.historia:
+        print(f"[INFO] Enviando Historia de Terremotos a {args.chat_id}...")
+        ok = send_telegram_message(args.token, args.chat_id, format_historic_timeline())
+        if ok:
+            print("[ÉXITO] Historia enviada.")
+        else:
+            print("[FALLO] Error al enviar Historia.")
     elif args.poll:
         print(f"[INFO] Verificando sismos nuevos (M>={args.min_mag}) en USGS para {args.chat_id}...")
         n = fetch_and_notify_new_events(args.token, args.chat_id, min_mag=args.min_mag)
