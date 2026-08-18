@@ -106,8 +106,13 @@ def format_weekly_bulletin(
     )
 
 
-def fetch_and_notify_new_events(bot_token: str, chat_id: str, min_mag: float = 5.0) -> int:
-    """Fetch recent USGS events M>=min_mag in Chile and notify if new."""
+def fetch_and_notify_new_events(
+    bot_token: str,
+    chat_id: str,
+    min_mag: float = 5.0,
+    max_per_run: int = 3,
+) -> int:
+    """Fetch recent USGS events M>=min_mag in Chile and notify if new with anti-flood limit."""
     state_file = "data/notified_events.json"
     notified = set()
     if os.path.exists(state_file):
@@ -120,7 +125,7 @@ def fetch_and_notify_new_events(bot_token: str, chat_id: str, min_mag: float = 5
     usgs_url = (
         "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson"
         f"&minlatitude=-56&maxlatitude=-17&minlongitude=-78&maxlongitude=-66"
-        f"&minmagnitude={min_mag}&orderby=time&limit=20"
+        f"&minmagnitude={min_mag}&orderby=time&limit=30"
     )
     req = urllib.request.Request(usgs_url, headers={"User-Agent": "CHILE-OEF/1.0"})
     sent_count = 0
@@ -132,8 +137,18 @@ def fetch_and_notify_new_events(bot_token: str, chat_id: str, min_mag: float = 5
                 event_id = feat.get("id")
                 if not event_id or event_id in notified:
                     continue
+
+                # Throttle max notifications per run to avoid spamming the channel during a swarm
+                if sent_count >= max_per_run:
+                    print(f"[INFO] Límite de notificaciones por corrida alcanzado ({max_per_run}). Omitiendo restantes por esta vez.")
+                    break
+
                 props = feat.get("properties", {})
                 mag = props.get("mag", 0.0)
+                if mag < min_mag:
+                    notified.add(event_id)
+                    continue
+
                 place = props.get("place", "Chile")
                 clean_place = place.replace("km of ", "km de ").replace("Chile", "").strip(" ,")
                 lat = feat.get("geometry", {}).get("coordinates", [0, 0])[1]
@@ -180,7 +195,8 @@ def main():
     parser.add_argument("--chat-id", default=DEFAULT_CHANNEL_ID, help="Telegram Chat ID or @channel_name")
     parser.add_argument("--test", action="store_true", help="Send a test message")
     parser.add_argument("--weekly", action="store_true", help="Send weekly bulletin")
-    parser.add_argument("--poll", action="store_true", help="Check USGS and notify new events M>=5.0")
+    parser.add_argument("--poll", action="store_true", help="Check USGS and notify new events M>=min_mag")
+    parser.add_argument("--min-mag", type=float, default=5.0, help="Minimum magnitude threshold (default 5.0)")
     parser.add_argument("--message", help="Custom text message to send")
 
     args = parser.parse_args()
@@ -204,8 +220,8 @@ def main():
         else:
             print("[FALLO] Error al enviar boletín semanal.")
     elif args.poll:
-        print(f"[INFO] Verificando sismos nuevos en USGS para {args.chat_id}...")
-        n = fetch_and_notify_new_events(args.token, args.chat_id)
+        print(f"[INFO] Verificando sismos nuevos (M>={args.min_mag}) en USGS para {args.chat_id}...")
+        n = fetch_and_notify_new_events(args.token, args.chat_id, min_mag=args.min_mag)
         print(f"[INFO] Polling finalizado. Sismos notificados: {n}")
     elif args.message:
         ok = send_telegram_message(args.token, args.chat_id, args.message)
