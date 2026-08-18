@@ -13,10 +13,7 @@ import urllib.parse
 import urllib.request
 from typing import Any, Optional
 
-DEFAULT_BOT_TOKEN = os.getenv(
-    "CHILE_OEF_TELEGRAM_BOT_TOKEN",
-    "8809786212:AAGDWCfSg0WxkC0siPYPjn70GOWdcjGP6Tw"
-)
+DEFAULT_BOT_TOKEN = os.getenv("CHILE_OEF_TELEGRAM_BOT_TOKEN", "")
 DEFAULT_CHANNEL_ID = os.getenv("CHILE_OEF_TELEGRAM_CHANNEL_ID", "")
 API_BASE = "https://chile-oef-api.onrender.com/v1"
 
@@ -245,6 +242,10 @@ def main():
     parser.add_argument("--message", help="Custom text message to send")
 
     args = parser.parse_args()
+
+    if not args.token:
+        print("[AVISO] Debe especificar --token o configurar CHILE_OEF_TELEGRAM_BOT_TOKEN")
+        sys.exit(1)
 
     if not args.chat_id:
         print("[AVISO] Debe especificar --chat-id (ej: @mi_canal) o configurar CHILE_OEF_TELEGRAM_CHANNEL_ID")
