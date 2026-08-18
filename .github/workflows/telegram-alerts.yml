@@ -1,0 +1,43 @@
+name: Telegram — alertas de sismos M>=5
+
+# Consulta USGS por sismos M>=5 en Chile no notificados antes y avisa por
+# Telegram (scripts/telegram_alert.py --poll). El estado de qué ya se
+# notificó vive en data/notified_events.json y se commitea de vuelta al
+# repo después de cada corrida para no repetir avisos entre ejecuciones
+# (el runner de GitHub Actions no persiste filesystem entre corridas).
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CHILE_OEF_TELEGRAM_BOT_TOKEN: ${{ secrets.CHILE_OEF_TELEGRAM_BOT_TOKEN }}
+      CHILE_OEF_TELEGRAM_CHANNEL_ID: ${{ secrets.CHILE_OEF_TELEGRAM_CHANNEL_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Poll USGS and notify new M>=5 events
+        run: python scripts/telegram_alert.py --poll --min-mag 5.0
+
+      - name: Persist notified-events state
+        run: |
+          if ! git diff --quiet -- data/notified_events.json; then
+            git config user.name "chile-oef-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add data/notified_events.json
+            git commit -m "chore: actualizar estado de sismos notificados [skip ci]"
+            git push
+          else
+            echo "Sin sismos nuevos notificados en esta corrida."
+          fi
