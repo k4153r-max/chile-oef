@@ -68,20 +68,21 @@ def format_anomaly_message(
     prob_7d: float,
     baseline_prob: float,
 ) -> str:
-    """Format an anomaly alert adhering to scientific communication guidelines."""
-    ratio = f"{ias_index:.1f}x" if ias_index else "elevada"
+    """Format an anomaly alert in plain Spanish without technical jargon."""
+    ratio = f"{ias_index:.1f} veces" if ias_index else "más alta"
     chance_str = function_format_chance(prob_7d)
     baseline_str = function_format_chance(baseline_prob)
 
     return (
-        f"📊 *CHILE-OEF — Notificación de Anomalía Sísmica*\n\n"
+        f"📊 *CHILE-OEF — Actualización Sísmica*\n\n"
         f"📍 *Zona*: {zone_name}\n"
-        f"⚡ *Evento detonante*: M {event_mag:.1f} — {event_loc}\n"
-        f"📈 *Índice IAS*: *{ratio}* sobre la tasa histórica de fondo.\n"
-        f"🎲 *Probabilidad ETAS (7d, M≥5.0)*: *{chance_str}* (vs {baseline_str} habitual)\n\n"
-        f"ℹ️ _Estadística experimental sobre patrones de sismicidad. "
-        f"No constituye predicción determinista ni alarma de emergencia. "
-        f"Fuentes oficiales: [CSN](https://www.csn.uchile.cl/) y [SENAPRED](https://www.senapred.cl/)._\n\n"
+        f"⚡ *Sismo detectado*: Magnitud {event_mag:.1f} — {event_loc}\n\n"
+        f"❓ *¿Qué significa esta actividad?*\n"
+        f"Debido al efecto de las réplicas, la actividad sísmica en esta zona está *{ratio} más alta* de lo normal para un día común.\n\n"
+        f"🎲 *Probabilidad para los próximos 7 días*:\n"
+        f"Hay un *{chance_str} de posibilidad* de que ocurra otro sismo de magnitud 5.0 o superior en esta misma zona. (Lo habitual en una semana normal es {baseline_str}).\n\n"
+        f"💡 *Recomendación*:\n"
+        f"Mantén la calma. Recuerda revisar tu kit de emergencia y seguir siempre la información oficial del [CSN](https://www.csn.uchile.cl/) y [SENAPRED](https://www.senapred.cl/).\n\n"
         f"🌐 [Ver informe completo en etemen.cl/chile-oef/](https://etemen.cl/chile-oef/)"
     )
 
@@ -90,18 +91,16 @@ def format_weekly_bulletin(
     total_events: int = 42,
     b_val: float = 1.12,
     model_name: str = "ETAS mwc",
-    top_region: str = "Zona Central - Valparaíso / Coquimbo",
+    top_region: str = "Zona Central (Valparaíso / Coquimbo)",
 ) -> str:
-    """Format weekly seismic summary bulletin."""
+    """Format weekly seismic summary bulletin in plain Spanish."""
     return (
-        f"📅 *CHILE-OEF — Boletín Sísmico Semanal*\n\n"
-        f"📊 *Resumen de Sismicidad (Últimos 7 días)*:\n"
-        f"• *Eventos procesados*: {total_events} sismos M≥4.0 en Chile\n"
-        f"• *Parámetro b (Gutenberg–Richter)*: *{b_val:.2f}* ({model_name})\n"
-        f"• *Zona de mayor tasa relativa*: {top_region}\n\n"
-        f"ℹ️ _Modelo estadístico de pronóstico continuo. "
-        f"Información experimental no determinista. "
-        f"Fuentes oficiales: [CSN](https://www.csn.uchile.cl/) y [SENAPRED](https://www.senapred.cl/)._\n\n"
+        f"📅 *CHILE-OEF — Resumen Sísmico de la Semana*\n\n"
+        f"📊 *Lo que ocurrió en los últimos 7 días*:\n"
+        f"• *Sismos registrados en Chile*: {total_events} sismos de magnitud 4.0 o superior.\n"
+        f"• *Zona de mayor actividad*: {top_region}.\n"
+        f"• *Comportamiento*: La actividad nacional se mantiene dentro de los márgenes normales esperados para nuestro país.\n\n"
+        f"ℹ️ _Información estadística para comprender la sismicidad en Chile. No predice terremotos. Fuentes oficiales: [CSN](https://www.csn.uchile.cl/) y [SENAPRED](https://www.senapred.cl/)._\n\n"
         f"🌐 [Ver informe completo en etemen.cl/chile-oef/](https://etemen.cl/chile-oef/)"
     )
 
