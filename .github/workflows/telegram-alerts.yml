@@ -1,13 +1,13 @@
-name: Telegram — alertas de sismos M>=5
+name: Telegram — alertas de sismos M>=4
 
-# Consulta USGS por sismos M>=5 en Chile no notificados antes y avisa por
+# Consulta USGS por sismos M>=4 en Chile no notificados antes y avisa por
 # Telegram (scripts/telegram_alert.py --poll). El estado de qué ya se
 # notificó vive en data/notified_events.json y se commitea de vuelta al
 # repo después de cada corrida para no repetir avisos entre ejecuciones
 # (el runner de GitHub Actions no persiste filesystem entre corridas).
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "*/10 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -27,8 +27,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Poll USGS and notify new M>=5 events
-        run: python scripts/telegram_alert.py --poll --min-mag 5.0
+      - name: Poll USGS and notify new M>=4 events
+        run: python scripts/telegram_alert.py --poll --min-mag 4.0
 
       - name: Persist notified-events state
         run: |

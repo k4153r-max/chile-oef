@@ -8,9 +8,7 @@ import scripts.telegram_alert as telegram_alert
 from scripts.telegram_alert import format_observed_event_message
 
 
-def _feature(
-    event_id: str, magnitude: float, *, when: datetime | None = None
-) -> dict[str, object]:
+def _feature(event_id: str, magnitude: float, *, when: datetime | None = None) -> dict[str, object]:
     properties: dict[str, object] = {
         "mag": magnitude,
         "place": "10 km of Valparaíso, Chile",

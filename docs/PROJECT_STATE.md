@@ -1293,17 +1293,18 @@ references and remaining gaps: `docs/forecast-v2-research.md`.
   `insufficient_evidence`, never an implicit pass.
 - Migration `0016` adds nullable background lineage to `forecast_runs` and
   `evaluation_runs`. Alembic reports one head (`0016`).
-- Validation on this machine: 146 unit tests passed; the 17 focused v2/promotion
+- Validation on this machine: 151 unit tests passed; the 17 focused v2/promotion
   tests passed; modified-scope Ruff passed. All 26 integration tests were skipped
   because `CHILE_OEF_TEST_DATABASE_URL` is not configured, so the migration and
   PostgreSQL advisory-lock path are not integration-proven in this session.
-- Telegram polling now runs from `.github/workflows/telegram-seismic-alerts.yml`
+  The full local run finished with 154 passed and 26 PostgreSQL-dependent skips.
+- Telegram polling now runs from `.github/workflows/telegram-alerts.yml`
   every 10 minutes and notifies new USGS Chile events with magnitude `M >= 4.0`.
-  The first run creates a silent baseline, state is restored through Actions
-  cache, and messages report only the observed event (no fabricated IAS or
-  probability). The runtime state file is ignored by Git. A bot token that was
-  previously embedded in the script was removed; because it remains in Git
-  history, it must be rotated in BotFather and the GitHub secret updated.
+  The first run creates a silent baseline; subsequent state is stored in the
+  repository in deterministic sorted order, so the workflow commits only when
+  the event set really changes. Messages report only the observed event (no
+  fabricated IAS or probability), reject events older than two hours, and retain
+  Chilean local time. The token is supplied only through the GitHub secret.
 
 ## Verified static data releases
 
