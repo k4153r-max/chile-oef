@@ -206,10 +206,27 @@ class ForecastRunSummaryResponse(BaseModel):
     b_value_used: float
     calibration_status: str
     method_version: str
+    background_rate_run_id: uuid.UUID | None = None
+    background_spatial_model: str
+    predictive_catalog_simulations: int | None = None
 
 
 class ForecastRunListResponse(BaseModel):
     data: list[ForecastRunSummaryResponse]
+    disclaimer: str = DISCLAIMER_ES
+
+
+class ForecastOperationalStatusResponse(BaseModel):
+    state: str
+    as_of: datetime
+    latest_forecast_run_id: uuid.UUID | None
+    latest_issued_at: datetime | None
+    latest_validity_end: datetime | None
+    age_seconds: float | None
+    valid_now: bool
+    expected_issue_interval_seconds: float
+    background_spatial_model: str | None
+    etas_stability_state: str | None
     disclaimer: str = DISCLAIMER_ES
 
 
@@ -238,6 +255,10 @@ class ForecastRunDetailResponse(BaseModel):
     b_value_used: float
     calibration_status: str
     method_version: str
+    background_rate_run_id: uuid.UUID | None = None
+    background_spatial_model: str
+    etas_stability: dict[str, object]
+    predictive_catalog_simulation: dict[str, object] | None = None
     magnitude_bins: list[ForecastMagnitudeBinResponse]
     selected_magnitude_lower: float
     cell_count_total: int

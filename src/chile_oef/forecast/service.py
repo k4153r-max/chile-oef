@@ -11,10 +11,17 @@ from chile_oef.db.models import (
     ForecastRun,
     GutenbergRichterEstimate,
     SeismicCell,
+    SeismicCellBackgroundRate,
+    SeismicityBackgroundRateRun,
+    SeismicityDeclusteringRun,
     SpatialGrid,
     SpatiotemporalEtasEstimate,
 )
 from chile_oef.forecast.generation import ForecastGenerationPolicy, generate_forecast_cells
+from chile_oef.forecast.simulation import (
+    CatalogSimulationPolicy,
+    simulate_predictive_catalog_counts,
+)
 from chile_oef.forecast.specification import ForecastSpecification, MagnitudeBin
 from chile_oef.seismicity.background_rate import GridCellTarget
 from chile_oef.seismicity.catalog_selection import fetch_declustering_catalog
@@ -51,6 +58,8 @@ class GenerationInputs:
     prior_event_latitudes: tuple[float, ...]
     prior_event_longitudes: tuple[float, ...]
     prior_event_magnitudes: tuple[float, ...]
+    background_rate_run: SeismicityBackgroundRateRun | None
+    background_cell_weights: dict[str, float] | None
 
 
 class ForecastService:
@@ -60,10 +69,12 @@ class ForecastService:
         *,
         specification: ForecastSpecification,
         policy: ForecastGenerationPolicy | None = None,
+        simulation_policy: CatalogSimulationPolicy | None = None,
     ) -> None:
         self.session = session
         self.specification = specification
         self.policy = policy or ForecastGenerationPolicy()
+        self.simulation_policy = simulation_policy
 
     def prepare_generation_inputs(
         self,
@@ -72,6 +83,7 @@ class ForecastService:
         gutenberg_richter_estimate_id: uuid.UUID,
         issued_at: datetime,
         horizon_id: str,
+        background_rate_run_id: uuid.UUID | None = None,
     ) -> GenerationInputs:
         """Resolve and validate the ETAS/Gutenberg-Richter/completeness
         lineage, fetch the availability-safe prior catalog as of
@@ -153,6 +165,37 @@ class ForecastService:
             for cell in cells_orm
         ]
 
+        background_rate_run: SeismicityBackgroundRateRun | None = None
+        background_cell_weights: dict[str, float] | None = None
+        if background_rate_run_id is not None:
+            background_rate_run = self.session.get(
+                SeismicityBackgroundRateRun, background_rate_run_id
+            )
+            if background_rate_run is None:
+                raise ValueError(f"background rate run {background_rate_run_id} not found")
+            if background_rate_run.grid_id != grid.id:
+                raise ValueError(
+                    "background rate run and forecast specification reference different grids"
+                )
+            declustering_run = self.session.get(
+                SeismicityDeclusteringRun, background_rate_run.declustering_run_id
+            )
+            if declustering_run is None:
+                raise ValueError("background rate run references a missing declustering run")
+            if declustering_run.gutenberg_richter_estimate_id != gr_source.id:
+                raise ValueError(
+                    "background rate run and forecast reference different Gutenberg-Richter "
+                    "lineages"
+                )
+            background_rows = list(
+                self.session.scalars(
+                    select(SeismicCellBackgroundRate).where(
+                        SeismicCellBackgroundRate.background_rate_run_id == background_rate_run.id
+                    )
+                )
+            )
+            background_cell_weights = {row.cell_id: row.rate_per_year for row in background_rows}
+
         observations = fetch_declustering_catalog(
             self.session,
             as_of=issued_at,
@@ -210,6 +253,8 @@ class ForecastService:
             prior_event_latitudes=tuple(prior_lats),
             prior_event_longitudes=tuple(prior_lons),
             prior_event_magnitudes=tuple(prior_mags),
+            background_rate_run=background_rate_run,
+            background_cell_weights=background_cell_weights,
         )
 
     def issue_forecast(
@@ -221,6 +266,7 @@ class ForecastService:
         horizon_id: str,
         trigger_type: str = "scheduled",
         supersedes_forecast_run_id: uuid.UUID | None = None,
+        background_rate_run_id: uuid.UUID | None = None,
     ) -> ForecastRun:
         """Issue and persist one forecast (docs/forecast-contract.md). See
         `prepare_generation_inputs` for the lineage/availability rules this
@@ -234,6 +280,7 @@ class ForecastService:
             gutenberg_richter_estimate_id=gutenberg_richter_estimate_id,
             issued_at=issued_at,
             horizon_id=horizon_id,
+            background_rate_run_id=background_rate_run_id,
         )
 
         result = generate_forecast_cells(
@@ -249,8 +296,23 @@ class ForecastService:
             validity_end_days=inputs.validity_end_days,
             cells=inputs.cell_targets,
             magnitude_bins=inputs.magnitude_bins,
+            background_cell_weights=inputs.background_cell_weights,
             policy=self.policy,
         )
+        diagnostics = dict(result.diagnostics)
+        if self.simulation_policy is not None:
+            simulation = simulate_predictive_catalog_counts(
+                prior_event_times_days=inputs.prior_event_times_days,
+                prior_event_magnitudes=inputs.prior_event_magnitudes,
+                etas_parameters=inputs.etas_parameters,
+                b_value=inputs.b_value,
+                reference_magnitude=inputs.reference_magnitude,
+                validity_start_days=inputs.validity_start_days,
+                validity_end_days=inputs.validity_end_days,
+                magnitude_bins=inputs.magnitude_bins,
+                policy=self.simulation_policy,
+            )
+            diagnostics["predictive_catalog_simulation"] = simulation.as_dict()
 
         etas_source = inputs.etas_source
         gr_source = inputs.gr_source
@@ -263,6 +325,9 @@ class ForecastService:
         run = ForecastRun(
             spatiotemporal_etas_estimate_id=etas_source.id,
             gutenberg_richter_estimate_id=gr_source.id,
+            background_rate_run_id=(
+                inputs.background_rate_run.id if inputs.background_rate_run is not None else None
+            ),
             grid_id=grid.id,
             supersedes_forecast_run_id=supersedes_forecast_run_id,
             trigger_type=trigger_type,
@@ -278,7 +343,7 @@ class ForecastService:
             calibration_status=result.calibration_status,
             cell_count=len(cell_targets),
             magnitude_bin_count=len(self.specification.magnitude_bins),
-            diagnostics_json=result.diagnostics,
+            diagnostics_json=diagnostics,
         )
         self.session.add(run)
         self.session.flush()

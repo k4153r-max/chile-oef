@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import json
 import uuid
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -10,10 +11,16 @@ from sqlalchemy import func, select
 
 from chile_oef.app.settings import get_settings
 from chile_oef.datasets.service import DatasetVersionService
-from chile_oef.db.models import FaultTrace, SlabNode
+from chile_oef.db.models import EvaluationFoldScore, EvaluationRun, FaultTrace, SlabNode
 from chile_oef.db.session import SessionLocal
+from chile_oef.evaluation.promotion import (
+    assess_model_promotion,
+    paired_information_gain_bootstrap,
+)
 from chile_oef.evaluation.replay import WalkForwardPolicy, run_walk_forward_evaluation
+from chile_oef.forecast.operations import issue_operational_forecast
 from chile_oef.forecast.service import ForecastService
+from chile_oef.forecast.simulation import CatalogSimulationPolicy
 from chile_oef.forecast.specification import load_forecast_specification
 from chile_oef.ingestion.historical_backfill import (
     BackfillBounds,
@@ -181,10 +188,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     forecast.add_argument("--spatiotemporal-etas-estimate-id", type=uuid.UUID, required=True)
     forecast.add_argument("--gutenberg-richter-estimate-id", type=uuid.UUID, required=True)
+    forecast.add_argument("--background-rate-run-id", type=uuid.UUID)
     forecast.add_argument("--issued-at", type=_aware_datetime, required=True)
     forecast.add_argument("--horizon-id", required=True, help="e.g. PT6H, P1D, P3D, P7D")
     forecast.add_argument("--trigger-type", default="scheduled")
     forecast.add_argument("--supersedes-forecast-run-id", type=uuid.UUID)
+    forecast.add_argument("--catalog-simulations", type=int, default=500)
+
+    operational_forecast = subparsers.add_parser(
+        "issue-operational-forecast",
+        help="idempotently issue a scheduled forecast from the latest compatible model lineage",
+    )
+    operational_forecast.add_argument("--issued-at", type=_aware_datetime, required=True)
+    operational_forecast.add_argument(
+        "--horizon-id", required=True, help="e.g. PT6H, P1D, P3D, P7D"
+    )
+    operational_forecast.add_argument("--catalog-simulations", type=int, default=500)
 
     walk_forward = subparsers.add_parser(
         "run-walk-forward-evaluation",
@@ -195,6 +214,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     walk_forward.add_argument("--spatiotemporal-etas-estimate-id", type=uuid.UUID, required=True)
     walk_forward.add_argument("--gutenberg-richter-estimate-id", type=uuid.UUID, required=True)
+    walk_forward.add_argument(
+        "--background-rate-run-id",
+        type=uuid.UUID,
+        help="optional adaptive spatial background candidate to evaluate",
+    )
     walk_forward.add_argument("--walk-forward-start", type=_aware_datetime, required=True)
     walk_forward.add_argument("--walk-forward-end", type=_aware_datetime, required=True)
     walk_forward.add_argument("--step-seconds", type=float, required=True)
@@ -219,6 +243,13 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     walk_forward.add_argument("--seed", type=int, default=0)
+    promotion = subparsers.add_parser(
+        "assess-model-promotion",
+        help="apply the registered conservative promotion gate to an immutable evaluation run",
+    )
+    promotion.add_argument("--evaluation-run-id", type=uuid.UUID, required=True)
+    promotion.add_argument("--champion-evaluation-run-id", type=uuid.UUID, required=True)
+    promotion.add_argument("--seed", type=int, default=0)
 
     backfill = subparsers.add_parser(
         "backfill-usgs-historical",
@@ -505,17 +536,35 @@ def main() -> None:
             run = ForecastService(
                 session,
                 specification=load_forecast_specification(settings.forecast_specification_path),
+                simulation_policy=CatalogSimulationPolicy(simulations=args.catalog_simulations),
             ).issue_forecast(
                 spatiotemporal_etas_estimate_id=args.spatiotemporal_etas_estimate_id,
                 gutenberg_richter_estimate_id=args.gutenberg_richter_estimate_id,
                 issued_at=args.issued_at,
                 horizon_id=args.horizon_id,
+                simulation_policy=CatalogSimulationPolicy(simulations=args.catalog_simulations),
+                background_rate_run_id=args.background_rate_run_id,
                 trigger_type=args.trigger_type,
                 supersedes_forecast_run_id=args.supersedes_forecast_run_id,
             )
         print(
             f"forecast_run_id={run.id} cells={run.cell_count} bins={run.magnitude_bin_count} "
             f"validity_start={run.validity_start} validity_end={run.validity_end}"
+        )
+        return
+    if args.command == "issue-operational-forecast":
+        with SessionLocal() as session:
+            result = issue_operational_forecast(
+                session,
+                specification=load_forecast_specification(settings.forecast_specification_path),
+                issued_at=args.issued_at,
+                horizon_id=args.horizon_id,
+                simulation_policy=CatalogSimulationPolicy(simulations=args.catalog_simulations),
+            )
+        print(
+            f"forecast_run_id={result.run.id} created={result.created} "
+            f"validity_start={result.run.validity_start} "
+            f"validity_end={result.run.validity_end}"
         )
         return
     if args.command == "run-walk-forward-evaluation":
@@ -525,6 +574,7 @@ def main() -> None:
                 specification=load_forecast_specification(settings.forecast_specification_path),
                 spatiotemporal_etas_estimate_id=args.spatiotemporal_etas_estimate_id,
                 gutenberg_richter_estimate_id=args.gutenberg_richter_estimate_id,
+                background_rate_run_id=args.background_rate_run_id,
                 walk_forward_start=args.walk_forward_start,
                 walk_forward_end=args.walk_forward_end,
                 step=timedelta(seconds=args.step_seconds),
@@ -543,6 +593,83 @@ def main() -> None:
             f"evaluation_run_id={evaluation_run.id} folds={evaluation_run.fold_count} "
             f"zero_observed_folds={evaluation_run.zero_observed_fold_count}"
         )
+        return
+    if args.command == "assess-model-promotion":
+        with SessionLocal() as session:
+            evaluation_run = session.get(EvaluationRun, args.evaluation_run_id)
+            if evaluation_run is None:
+                raise SystemExit(f"evaluation run {args.evaluation_run_id} not found")
+            champion_run = session.get(EvaluationRun, args.champion_evaluation_run_id)
+            if champion_run is None:
+                raise SystemExit(
+                    f"champion evaluation run {args.champion_evaluation_run_id} not found"
+                )
+            protocol_fields = (
+                "grid_id",
+                "horizon_id",
+                "walk_forward_start",
+                "walk_forward_end",
+                "step_seconds",
+                "adjudication_delay_seconds",
+            )
+            if any(
+                getattr(evaluation_run, field) != getattr(champion_run, field)
+                for field in protocol_fields
+            ):
+                raise SystemExit("candidate and champion evaluation protocols do not match")
+            candidate_folds = {
+                fold.issued_at: fold
+                for fold in session.scalars(
+                    select(EvaluationFoldScore).where(
+                        EvaluationFoldScore.evaluation_run_id == evaluation_run.id
+                    )
+                )
+            }
+            champion_folds = {
+                fold.issued_at: fold
+                for fold in session.scalars(
+                    select(EvaluationFoldScore).where(
+                        EvaluationFoldScore.evaluation_run_id == champion_run.id
+                    )
+                )
+            }
+            if candidate_folds.keys() != champion_folds.keys():
+                raise SystemExit("candidate and champion folds do not align exactly")
+            issue_times = sorted(candidate_folds)
+            observed_event_counts = [
+                candidate_folds[issue_time].observed_event_count for issue_time in issue_times
+            ]
+            if any(
+                candidate_folds[issue_time].observed_event_count
+                != champion_folds[issue_time].observed_event_count
+                for issue_time in issue_times
+            ):
+                raise SystemExit("candidate and champion were scored against different outcomes")
+            comparative_gain = paired_information_gain_bootstrap(
+                candidate_log_likelihoods=[
+                    float(candidate_folds[t].scores_json["point_process_log_likelihood"])
+                    for t in issue_times
+                ],
+                champion_log_likelihoods=[
+                    float(champion_folds[t].scores_json["point_process_log_likelihood"])
+                    for t in issue_times
+                ],
+                observed_event_counts=observed_event_counts,
+                rng=np.random.default_rng(args.seed),
+                n_resamples=evaluation_run.bootstrap_resamples,
+                confidence_level=evaluation_run.bootstrap_confidence_level,
+            )
+            assessment = assess_model_promotion(
+                aggregate_scores=evaluation_run.aggregate_scores_json,
+                comparative_information_gain=comparative_gain,
+                fold_count=len(issue_times),
+                observed_event_count=sum(observed_event_counts),
+            )
+        payload = assessment.as_dict()
+        payload["candidate_evaluation_run_id"] = str(evaluation_run.id)
+        payload["champion_evaluation_run_id"] = str(champion_run.id)
+        payload["comparative_information_gain_per_event"] = comparative_gain
+        print(json.dumps(payload, sort_keys=True))
         return
     if args.command == "backfill-usgs-historical":
         bounds = BackfillBounds(

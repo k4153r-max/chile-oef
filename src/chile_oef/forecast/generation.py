@@ -1,5 +1,5 @@
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -72,6 +72,52 @@ def _magnitude_bin_fraction(
     return lower_fraction - upper_fraction
 
 
+def _etas_stability_diagnostics(
+    *,
+    parameters: SpatiotemporalEtasParameters,
+    b_value: float,
+    horizon_days: float,
+) -> dict[str, Any]:
+    """Report branching/stationarity diagnostics without changing the fit."""
+    beta = b_value * math.log(10.0)
+    magnitude_moment_finite = parameters.alpha < beta
+    magnitude_factor = beta / (beta - parameters.alpha) if magnitude_moment_finite else None
+    horizon_integral = _integral_rate(parameters.c_days, parameters.p_exponent, horizon_days)
+    finite_horizon_direct_offspring = (
+        parameters.k0 * magnitude_factor * horizon_integral
+        if magnitude_factor is not None
+        else None
+    )
+
+    lifetime_direct_offspring: float | None
+    if magnitude_factor is not None and parameters.p_exponent > 1.0:
+        lifetime_integral = parameters.c_days ** (1.0 - parameters.p_exponent) / (
+            parameters.p_exponent - 1.0
+        )
+        lifetime_direct_offspring = parameters.k0 * magnitude_factor * lifetime_integral
+    else:
+        lifetime_direct_offspring = None
+
+    if not magnitude_moment_finite:
+        state = "non_finite_magnitude_productivity"
+    elif parameters.p_exponent <= 1.0:
+        state = "finite_horizon_only_p_not_above_one"
+    elif lifetime_direct_offspring is not None and lifetime_direct_offspring >= 1.0:
+        state = "supercritical_lifetime_branching"
+    else:
+        state = "subcritical_lifetime_branching"
+
+    return {
+        "state": state,
+        "beta": beta,
+        "alpha_below_beta": magnitude_moment_finite,
+        "p_above_one": parameters.p_exponent > 1.0,
+        "finite_horizon_mean_direct_offspring": finite_horizon_direct_offspring,
+        "lifetime_mean_direct_offspring": lifetime_direct_offspring,
+        "forecast_horizon_days": horizon_days,
+    }
+
+
 def generate_forecast_cells(
     *,
     prior_event_times_days: Sequence[float],
@@ -86,6 +132,7 @@ def generate_forecast_cells(
     validity_end_days: float,
     cells: Sequence[GridCellTarget],
     magnitude_bins: Sequence[MagnitudeBin],
+    background_cell_weights: Mapping[str, float] | None = None,
     policy: ForecastGenerationPolicy | None = None,
 ) -> ForecastGenerationResult:
     """Grid-cell x magnitude-bin forecast from an already-fit spatiotemporal
@@ -119,7 +166,36 @@ def generate_forecast_cells(
         "prior_event_count": len(prior_event_times_days),
         "spatial_approximation": "point_density_at_cell_center",
         "uncertainty_propagated": False,
+        "etas_stability": _etas_stability_diagnostics(
+            parameters=etas_parameters,
+            b_value=b_value,
+            horizon_days=duration_days,
+        ),
     }
+
+    normalized_background_weights: dict[str, float] | None = None
+    if background_cell_weights is not None:
+        missing = {cell.cell_id for cell in cells}.difference(background_cell_weights)
+        if missing:
+            raise ValueError(
+                "adaptive background weights do not cover every forecast cell; "
+                f"missing_count={len(missing)}"
+            )
+        if any(
+            weight < 0 or not math.isfinite(weight) for weight in background_cell_weights.values()
+        ):
+            raise ValueError("adaptive background weights must be finite and non-negative")
+        total_background_weight = math.fsum(background_cell_weights[cell.cell_id] for cell in cells)
+        if total_background_weight <= 0:
+            raise ValueError("adaptive background weights must have positive total mass")
+        normalized_background_weights = {
+            cell.cell_id: background_cell_weights[cell.cell_id] / total_background_weight
+            for cell in cells
+        }
+        diagnostics["background_spatial_model"] = "adaptive_kernel_normalized_to_etas_mu"
+        diagnostics["background_raw_weight_total"] = total_background_weight
+    else:
+        diagnostics["background_spatial_model"] = "homogeneous_area_weighted"
 
     t = np.asarray(prior_event_times_days, dtype=float)
     lat = np.asarray(prior_event_latitudes, dtype=float)
@@ -166,9 +242,11 @@ def generate_forecast_cells(
             )
         else:
             triggering_contribution = 0.0
-        background_contribution = (
-            etas_parameters.mu_per_day * (cell.area_km2 / region_area_km2) * duration_days
-        )
+        if normalized_background_weights is None:
+            background_weight = cell.area_km2 / region_area_km2
+        else:
+            background_weight = normalized_background_weights[cell.cell_id]
+        background_contribution = etas_parameters.mu_per_day * background_weight * duration_days
         cell_total_expected_count = background_contribution + triggering_contribution
 
         for bin_spec, fraction in zip(magnitude_bins, bin_fractions, strict=True):
@@ -200,7 +278,11 @@ def generate_forecast_cells(
     return ForecastGenerationResult(
         cell_forecasts=tuple(cell_forecasts),
         total_expected_count_all_magnitudes=total_expected_count_all_magnitudes,
-        method_version=policy.method_version,
+        method_version=(
+            "etas_gr_adaptive_background_grid_forecast_v2"
+            if normalized_background_weights is not None
+            else policy.method_version
+        ),
         calibration_status=policy.calibration_status,
         diagnostics=diagnostics,
     )

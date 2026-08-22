@@ -32,6 +32,9 @@ class ForecastRun(Base):
     gutenberg_richter_estimate_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("gutenberg_richter_estimates.id"), nullable=False
     )
+    background_rate_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("seismicity_background_rate_runs.id")
+    )
     grid_id: Mapped[str] = mapped_column(ForeignKey("spatial_grids.id"), nullable=False)
     supersedes_forecast_run_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("forecast_runs.id")

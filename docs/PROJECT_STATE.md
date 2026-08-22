@@ -1,6 +1,6 @@
 # CHILE-OEF continuity and handoff log
 
-Last updated: 2026-08-17 (public page audit: status rail, method, USGS, SEO), America/Santiago
+Last updated: 2026-08-22 (forecast v2 research slice and promotion gate), America/Santiago
 
 This file is the durable context for a new Claude/Codex session. Read it before
 editing. Keep it current. The chat history is not required to resume the project.
@@ -1263,8 +1263,47 @@ multidisciplinary audit of https://etemen.cl/chile-oef/ :
 - snapshot numbers baked into HTML; sitemap + JSON-LD Dataset/FAQ.
 
 Not done (still blocked, do not fake): CSN/POTIN ingest, prospective
-CSEP scores, parameter-uncertainty intervals, spatially varying
+CSEP scores, parameter-uncertainty intervals, jointly fitted spatial ETAS
 background, 27F `available_at` reconstruction, ML, paid Postgres, OELF.
+
+### Forecast v2 research slice (2026-08-22)
+
+Implemented after review of ICEF/OEF, USGS OAF, OEF Italy, adaptive-smoothed
+seismicity, UCERF3-ETAS, Bayesian ETAS and CSEP literature. Full decisions,
+references and remaining gaps: `docs/forecast-v2-research.md`.
+
+- Forecast generation can redistribute the fitted scalar ETAS background across
+  the exact adaptive-kernel `background_rate_run_id`, preserving total mass and
+  failing closed on incomplete/invalid weights. Method version is
+  `etas_gr_adaptive_background_grid_forecast_v2`; the old homogeneous behavior
+  remains available as the champion/control.
+- Forecast diagnostics now include finite-horizon and lifetime ETAS stability
+  states (`alpha < b ln(10)`, `p > 1`, direct offspring expectation). The live
+  mwc fit's `p=0.882` is correctly identified as finite-horizon only.
+- Optional ETAS branching catalog simulation produces whole-region predictive
+  count quantiles and `P(N>=1)` including future secondary triggering. This is
+  aleatory fixed-parameter uncertainty only, not spatial or parameter uncertainty.
+- Operational issuance is idempotent under a PostgreSQL advisory lock, selects
+  the latest compatible ETAS/GR/background lineage, and the API exposes forecast
+  freshness (`missing`, `future`, `expired`, `stale`, `fresh`).
+- Walk-forward evaluation accepts and records adaptive-background lineage. The
+  promotion CLI compares candidate and actual champion on exactly aligned folds,
+  block-bootstraps paired information gain per event, and also gates on sample
+  size, calibration and CSEP N/L/S/M consistency. Sparse evidence is
+  `insufficient_evidence`, never an implicit pass.
+- Migration `0016` adds nullable background lineage to `forecast_runs` and
+  `evaluation_runs`. Alembic reports one head (`0016`).
+- Validation on this machine: 146 unit tests passed; the 17 focused v2/promotion
+  tests passed; modified-scope Ruff passed. All 26 integration tests were skipped
+  because `CHILE_OEF_TEST_DATABASE_URL` is not configured, so the migration and
+  PostgreSQL advisory-lock path are not integration-proven in this session.
+- Telegram polling now runs from `.github/workflows/telegram-seismic-alerts.yml`
+  every 10 minutes and notifies new USGS Chile events with magnitude `M >= 4.0`.
+  The first run creates a silent baseline, state is restored through Actions
+  cache, and messages report only the observed event (no fabricated IAS or
+  probability). The runtime state file is ignored by Git. A bot token that was
+  previously embedded in the script was removed; because it remains in Git
+  history, it must be rotated in BotFather and the GitHub secret updated.
 
 ## Verified static data releases
 
@@ -1376,6 +1415,14 @@ The following should be done next, in this order:
     types. Keep-alive is the Cloudflare Worker `chile-oef-keepalive`
     (minutely GET `/v1/health`). Render free Postgres expires
     2026-09-15.
+14. ~~Forecast v2 research slice~~ -- implemented 2026-08-22: adaptive spatial
+    background challenger, finite-horizon catalog-count ensembles, ETAS stability
+    diagnostics, operational freshness/idempotency, walk-forward lineage and a
+    paired champion/challenger promotion gate. **Next by default now**: configure
+    disposable PostgreSQL, apply migration `0016`, execute both homogeneous and
+    adaptive walk-forward runs over identical windows, and run
+    `assess-model-promotion`. Do not switch the live champion unless the result is
+    `promote`. Parameter ensembles and spatial synthetic catalogs remain open.
 
 ## Known technical risks and decisions still to verify
 

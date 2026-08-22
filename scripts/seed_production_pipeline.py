@@ -18,6 +18,7 @@ from chile_oef.app.settings import get_settings
 from chile_oef.db.models import SpatialGrid
 from chile_oef.db.session import SessionLocal
 from chile_oef.forecast.service import ForecastService
+from chile_oef.forecast.simulation import CatalogSimulationPolicy
 from chile_oef.forecast.specification import load_forecast_specification
 from chile_oef.ingestion.historical_backfill import (
     BackfillBounds,
@@ -145,9 +146,14 @@ async def main() -> None:
 
         print("== issue forecast ==", flush=True)
         specification = load_forecast_specification(settings.forecast_specification_path)
-        run = ForecastService(session, specification=specification).issue_forecast(
+        run = ForecastService(
+            session,
+            specification=specification,
+            simulation_policy=CatalogSimulationPolicy(),
+        ).issue_forecast(
             spatiotemporal_etas_estimate_id=etas_record.id,
             gutenberg_richter_estimate_id=gr_record.id,
+            background_rate_run_id=background_run.id,
             issued_at=datetime.now(UTC),
             horizon_id="P7D",
         )

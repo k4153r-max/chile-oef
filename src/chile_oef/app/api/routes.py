@@ -17,6 +17,7 @@ from chile_oef.app.api.schemas import (
     EventRevisionResponse,
     ForecastCellResponse,
     ForecastMagnitudeBinResponse,
+    ForecastOperationalStatusResponse,
     ForecastPlacesResponse,
     ForecastRunDetailResponse,
     ForecastRunListResponse,
@@ -52,6 +53,7 @@ from chile_oef.db.models import (
 )
 from chile_oef.db.repositories.events import get_event_revisions, list_events
 from chile_oef.db.session import get_session
+from chile_oef.forecast.operations import assess_forecast_freshness
 from chile_oef.forecast.places import (
     DEFAULT_RADIUS_KM,
     PLACES,
@@ -478,9 +480,40 @@ def forecast_runs(
                 b_value_used=run.b_value_used,
                 calibration_status=run.calibration_status,
                 method_version=run.method_version,
+                background_rate_run_id=run.background_rate_run_id,
+                background_spatial_model=run.diagnostics_json.get(
+                    "background_spatial_model", "homogeneous_area_weighted"
+                ),
+                predictive_catalog_simulations=(
+                    run.diagnostics_json.get("predictive_catalog_simulation", {}).get(
+                        "simulation_count"
+                    )
+                ),
             )
             for run in rows
         ]
+    )
+
+
+@router.get("/forecasts/status", response_model=ForecastOperationalStatusResponse)
+def forecast_operational_status(session: SessionDependency) -> ForecastOperationalStatusResponse:
+    as_of = datetime.now(UTC)
+    run = session.scalar(select(ForecastRun).order_by(ForecastRun.issued_at.desc()).limit(1))
+    freshness = assess_forecast_freshness(run, as_of=as_of)
+    stability = run.diagnostics_json.get("etas_stability", {}) if run is not None else {}
+    return ForecastOperationalStatusResponse(
+        state=freshness.state,
+        as_of=as_of,
+        latest_forecast_run_id=run.id if run is not None else None,
+        latest_issued_at=run.issued_at if run is not None else None,
+        latest_validity_end=run.validity_end if run is not None else None,
+        age_seconds=freshness.age_seconds,
+        valid_now=freshness.valid_now,
+        expected_issue_interval_seconds=freshness.expected_issue_interval_seconds,
+        background_spatial_model=(
+            run.diagnostics_json.get("background_spatial_model") if run is not None else None
+        ),
+        etas_stability_state=stability.get("state"),
     )
 
 
@@ -560,6 +593,12 @@ def forecast_run_detail(
         b_value_used=run.b_value_used,
         calibration_status=run.calibration_status,
         method_version=run.method_version,
+        background_rate_run_id=run.background_rate_run_id,
+        background_spatial_model=run.diagnostics_json.get(
+            "background_spatial_model", "homogeneous_area_weighted"
+        ),
+        etas_stability=run.diagnostics_json.get("etas_stability", {}),
+        predictive_catalog_simulation=run.diagnostics_json.get("predictive_catalog_simulation"),
         magnitude_bins=[
             ForecastMagnitudeBinResponse(lower=lower, upper=upper) for lower, upper in bin_rows
         ],

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E501
 """CHILE-OEF — Telegram Notification & Anomaly Alert Script.
 
 Sends formatted statistical alerts to Telegram channels/chats following
@@ -12,17 +13,17 @@ import sys
 import urllib.parse
 import urllib.request
 from datetime import UTC, datetime, timedelta
-from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 CHILE_TZ = ZoneInfo("America/Santiago")
-
 DEFAULT_BOT_TOKEN = os.getenv("CHILE_OEF_TELEGRAM_BOT_TOKEN", "")
 DEFAULT_CHANNEL_ID = os.getenv("CHILE_OEF_TELEGRAM_CHANNEL_ID", "")
 API_BASE = "https://chile-oef-api.onrender.com/v1"
 
 
-def send_telegram_message(bot_token: str, chat_id: str, text: str, parse_mode: str = "Markdown") -> bool:
+def send_telegram_message(
+    bot_token: str, chat_id: str, text: str, parse_mode: str = "Markdown"
+) -> bool:
     """Send a message via Telegram Bot API."""
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {
@@ -32,9 +33,7 @@ def send_telegram_message(bot_token: str, chat_id: str, text: str, parse_mode: s
         "disable_web_page_preview": False,
     }
     data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        url, data=data, headers={"Content-Type": "application/json"}
-    )
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             res_json = json.loads(resp.read().decode("utf-8"))
@@ -44,7 +43,12 @@ def send_telegram_message(bot_token: str, chat_id: str, text: str, parse_mode: s
         return False
 
 
-function_format_chance = lambda prob: f"{prob*100:.1f}%" if prob >= 0.01 else f"1 en {round(1/prob):,}" if prob > 0 else "0%"
+def function_format_chance(prob: float) -> str:
+    if prob >= 0.01:
+        return f"{prob * 100:.1f}%"
+    if prob > 0:
+        return f"1 en {round(1 / prob):,}"
+    return "0%"
 
 
 def format_test_message() -> str:
@@ -91,6 +95,33 @@ def format_anomaly_message(
         f"💡 *Recomendación*:\n"
         f"Mantén la calma. Recuerda revisar tu kit de emergencia y seguir siempre la información oficial del *CSN* y *SENAPRED*.\n\n"
         f"🌐 [Ver informe completo en etemen.cl/chile-oef/](https://etemen.cl/chile-oef/)"
+    )
+
+
+def format_observed_event_message(
+    *,
+    zone_name: str,
+    event_mag: float,
+    event_loc: str,
+    source_url: str,
+    event_time: datetime | None = None,
+) -> str:
+    """Format a factual catalog notification without inferred probabilities."""
+    when_line = ""
+    if event_time is not None:
+        local_time = event_time.astimezone(CHILE_TZ)
+        when_line = f"🕐 *Cuándo*: {local_time.strftime('%d-%m-%Y %H:%M')} hora de Chile\n"
+    return (
+        "🌎 *CHILE-OEF — Sismo observado*\n\n"
+        f"📍 *Zona*: {zone_name}\n"
+        f"⚡ *Magnitud*: {event_mag:.1f}\n"
+        f"🧭 *Referencia*: {event_loc}\n"
+        f"{when_line}\n"
+        "Este mensaje informa una observación del catálogo USGS; no es una "
+        "predicción ni una alerta de evacuación. Confirma la información y las "
+        "recomendaciones en *CSN* y *SENAPRED*.\n\n"
+        f"🔎 [Ver registro de fuente]({source_url})\n"
+        "🌐 [Ver CHILE-OEF](https://etemen.cl/chile-oef/)"
     )
 
 
@@ -158,7 +189,7 @@ def format_historic_timeline() -> str:
 def fetch_and_notify_new_events(
     bot_token: str,
     chat_id: str,
-    min_mag: float = 5.0,
+    min_mag: float = 4.0,
     max_per_run: int = 3,
     max_age_hours: float = 2.0,
 ) -> int:
@@ -171,9 +202,10 @@ def fetch_and_notify_new_events(
     state_file = "data/notified_events.json"
     min_time_ms = int((datetime.now(UTC) - timedelta(hours=max_age_hours)).timestamp() * 1000)
     notified = set()
-    if os.path.exists(state_file):
+    state_exists = os.path.exists(state_file)
+    if state_exists:
         try:
-            with open(state_file, "r", encoding="utf-8") as f:
+            with open(state_file, encoding="utf-8") as f:
                 notified = set(json.load(f))
         except Exception:
             pass
@@ -189,6 +221,13 @@ def fetch_and_notify_new_events(
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             features = data.get("features", [])
+            if not state_exists:
+                notified.update(feat.get("id") for feat in features if feat.get("id"))
+                print(
+                    f"[INFO] Línea base creada con {len(notified)} eventos; "
+                    "no se enviaron observaciones históricas."
+                )
+                features = []
             for feat in reversed(features):  # Process oldest to newest
                 event_id = feat.get("id")
                 if not event_id or event_id in notified:
@@ -196,7 +235,9 @@ def fetch_and_notify_new_events(
 
                 # Throttle max notifications per run to avoid spamming the channel during a swarm
                 if sent_count >= max_per_run:
-                    print(f"[INFO] Límite de notificaciones por corrida alcanzado ({max_per_run}). Omitiendo restantes por esta vez.")
+                    print(
+                        f"[INFO] Límite de notificaciones por corrida alcanzado ({max_per_run}). Omitiendo restantes por esta vez."
+                    )
                     break
 
                 props = feat.get("properties", {})
@@ -234,13 +275,11 @@ def fetch_and_notify_new_events(
                 else:
                     zone = "Zona Austral"
 
-                msg = format_anomaly_message(
+                msg = format_observed_event_message(
                     zone_name=zone,
                     event_mag=mag,
                     event_loc=clean_place if clean_place else "Chile",
-                    ias_index=2.5 + (mag - 5.0) * 1.2,
-                    prob_7d=0.08 + (mag - 5.0) * 0.05,
-                    baseline_prob=0.03,
+                    source_url=props.get("url", "https://earthquake.usgs.gov/earthquakes/map/"),
                     event_time=event_time,
                 )
                 if send_telegram_message(bot_token, chat_id, msg):
@@ -251,7 +290,7 @@ def fetch_and_notify_new_events(
         # Save state
         os.makedirs(os.path.dirname(state_file), exist_ok=True)
         with open(state_file, "w", encoding="utf-8") as f:
-            json.dump(list(notified), f)
+            json.dump(sorted(notified), f)
     except Exception as e:
         print(f"[ERROR] Error al consultar USGS / notificar: {e}", file=sys.stderr)
 
@@ -261,14 +300,22 @@ def fetch_and_notify_new_events(
 def main():
     parser = argparse.ArgumentParser(description="CHILE-OEF Telegram Alert Tool")
     parser.add_argument("--token", default=DEFAULT_BOT_TOKEN, help="Telegram Bot Token")
-    parser.add_argument("--chat-id", default=DEFAULT_CHANNEL_ID, help="Telegram Chat ID or @channel_name")
+    parser.add_argument(
+        "--chat-id", default=DEFAULT_CHANNEL_ID, help="Telegram Chat ID or @channel_name"
+    )
     parser.add_argument("--test", action="store_true", help="Send a test message")
     parser.add_argument("--weekly", action="store_true", help="Send weekly bulletin")
     parser.add_argument("--kit", action="store_true", help="Send emergency kit checklist")
     parser.add_argument("--mitos", action="store_true", help="Send myths vs reality post")
-    parser.add_argument("--historia", action="store_true", help="Send historic earthquakes timeline")
-    parser.add_argument("--poll", action="store_true", help="Check USGS and notify new events M>=min_mag")
-    parser.add_argument("--min-mag", type=float, default=5.0, help="Minimum magnitude threshold (default 5.0)")
+    parser.add_argument(
+        "--historia", action="store_true", help="Send historic earthquakes timeline"
+    )
+    parser.add_argument(
+        "--poll", action="store_true", help="Check USGS and notify new events M>=min_mag"
+    )
+    parser.add_argument(
+        "--min-mag", type=float, default=4.0, help="Minimum magnitude threshold (default 4.0)"
+    )
     parser.add_argument("--message", help="Custom text message to send")
 
     args = parser.parse_args()
@@ -278,7 +325,9 @@ def main():
         sys.exit(1)
 
     if not args.chat_id:
-        print("[AVISO] Debe especificar --chat-id (ej: @mi_canal) o configurar CHILE_OEF_TELEGRAM_CHANNEL_ID")
+        print(
+            "[AVISO] Debe especificar --chat-id (ej: @mi_canal) o configurar CHILE_OEF_TELEGRAM_CHANNEL_ID"
+        )
         sys.exit(1)
 
     if args.test:
@@ -317,7 +366,9 @@ def main():
         else:
             print("[FALLO] Error al enviar Historia.")
     elif args.poll:
-        print(f"[INFO] Verificando sismos nuevos (M>={args.min_mag}) en USGS para {args.chat_id}...")
+        print(
+            f"[INFO] Verificando sismos nuevos (M>={args.min_mag}) en USGS para {args.chat_id}..."
+        )
         n = fetch_and_notify_new_events(args.token, args.chat_id, min_mag=args.min_mag)
         print(f"[INFO] Polling finalizado. Sismos notificados: {n}")
     elif args.message:

@@ -57,6 +57,11 @@ Intervals for future counts are called predictive intervals. Confidence or
 credible intervals are reserved for parameters or estimands under the stated
 frequentist or Bayesian procedure.
 
+The v2 catalog simulator currently represents aleatory finite-horizon ETAS
+branching at fixed parameters. It must not be described as total predictive
+uncertainty: ETAS/GR/background parameter uncertainty, catalog uncertainty and
+model uncertainty are not yet propagated. See `docs/forecast-v2-research.md`.
+
 ## Primary references
 
 The versioned bibliography is in `references/bibliography.bib`. The methodological

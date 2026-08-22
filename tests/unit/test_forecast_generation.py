@@ -256,3 +256,115 @@ def test_method_and_calibration_metadata() -> None:
     assert result.method_version == "etas_gr_grid_forecast_v1"
     assert result.calibration_status == "uncalibrated_point_forecast"
     assert result.diagnostics["uncertainty_propagated"] is False
+    assert result.diagnostics["background_spatial_model"] == "homogeneous_area_weighted"
+    assert result.diagnostics["etas_stability"]["state"] == "subcritical_lifetime_branching"
+
+
+def test_adaptive_background_redistributes_mu_and_preserves_total_mass() -> None:
+    params = SpatiotemporalEtasParameters(
+        mu_per_day=1.0,
+        k0=0.0,
+        alpha=0.5,
+        c_days=0.1,
+        p_exponent=1.2,
+        d0_km=5.0,
+        gamma=0.0,
+        q_exponent=1.8,
+    )
+    cells = [
+        GridCellTarget(
+            cell_id="quiet", center_latitude=-34.0, center_longitude=-71.0, area_km2=100.0
+        ),
+        GridCellTarget(
+            cell_id="active", center_latitude=-33.0, center_longitude=-71.0, area_km2=100.0
+        ),
+    ]
+    result = generate_forecast_cells(
+        prior_event_times_days=[],
+        prior_event_latitudes=[],
+        prior_event_longitudes=[],
+        prior_event_magnitudes=[],
+        etas_parameters=params,
+        b_value=1.0,
+        reference_magnitude=3.0,
+        region_area_km2=200.0,
+        validity_start_days=0.0,
+        validity_end_days=1.0,
+        cells=cells,
+        magnitude_bins=(MagnitudeBin(lower=3.0, upper=None),),
+        background_cell_weights={"quiet": 1.0, "active": 9.0},
+    )
+    by_cell = {row.cell_id: row.expected_count for row in result.cell_forecasts}
+    assert by_cell["active"] == pytest.approx(0.9)
+    assert by_cell["quiet"] == pytest.approx(0.1)
+    assert sum(by_cell.values()) == pytest.approx(params.mu_per_day)
+    assert result.method_version == "etas_gr_adaptive_background_grid_forecast_v2"
+    assert result.diagnostics["background_spatial_model"] == "adaptive_kernel_normalized_to_etas_mu"
+
+
+def test_adaptive_background_refuses_incomplete_cell_coverage() -> None:
+    params = SpatiotemporalEtasParameters(
+        mu_per_day=1.0,
+        k0=0.0,
+        alpha=0.5,
+        c_days=0.1,
+        p_exponent=1.2,
+        d0_km=5.0,
+        gamma=0.0,
+        q_exponent=1.8,
+    )
+    cells = [
+        GridCellTarget(cell_id="a", center_latitude=-34.0, center_longitude=-71.0, area_km2=100.0),
+        GridCellTarget(cell_id="b", center_latitude=-33.0, center_longitude=-71.0, area_km2=100.0),
+    ]
+    with pytest.raises(ValueError, match="missing_count=1"):
+        generate_forecast_cells(
+            prior_event_times_days=[],
+            prior_event_latitudes=[],
+            prior_event_longitudes=[],
+            prior_event_magnitudes=[],
+            etas_parameters=params,
+            b_value=1.0,
+            reference_magnitude=3.0,
+            region_area_km2=200.0,
+            validity_start_days=0.0,
+            validity_end_days=1.0,
+            cells=cells,
+            magnitude_bins=(MagnitudeBin(lower=3.0, upper=None),),
+            background_cell_weights={"a": 1.0},
+        )
+
+
+def test_p_not_above_one_is_reported_as_finite_horizon_only() -> None:
+    params = SpatiotemporalEtasParameters(
+        mu_per_day=1.0,
+        k0=0.05,
+        alpha=0.547,
+        c_days=0.036,
+        p_exponent=0.882,
+        d0_km=20.2,
+        gamma=0.0,
+        q_exponent=1.52,
+    )
+    result = generate_forecast_cells(
+        prior_event_times_days=[],
+        prior_event_latitudes=[],
+        prior_event_longitudes=[],
+        prior_event_magnitudes=[],
+        etas_parameters=params,
+        b_value=1.1215,
+        reference_magnitude=5.0,
+        region_area_km2=100.0,
+        validity_start_days=0.0,
+        validity_end_days=7.0,
+        cells=[
+            GridCellTarget(
+                cell_id="a", center_latitude=-33.0, center_longitude=-71.0, area_km2=100.0
+            )
+        ],
+        magnitude_bins=(MagnitudeBin(lower=5.0, upper=None),),
+    )
+    stability = result.diagnostics["etas_stability"]
+    assert stability["state"] == "finite_horizon_only_p_not_above_one"
+    assert stability["finite_horizon_mean_direct_offspring"] == pytest.approx(0.3136, rel=1e-3)
+    assert stability["lifetime_mean_direct_offspring"] is None

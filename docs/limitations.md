@@ -11,6 +11,10 @@
 - A high IAS is not a high probability of a damaging earthquake.
 - Occurrence forecasts are not forecasts of shaking, loss, or personal risk.
 - M>=7 evaluation is sample limited and cannot support small-cell supervised ML.
+- The adaptive-background forecast is a plug-in challenger: spatial background
+  and ETAS triggering parameters are not yet jointly estimated.
+- Synthetic forecast catalogs currently quantify whole-region count variability
+  at fixed parameters; they do not yet provide spatial or parameter uncertainty.
 
 Negative results, including failure of ML to improve ETAS, are valid scientific
 outcomes and must be published without retrospective model adjustment.
