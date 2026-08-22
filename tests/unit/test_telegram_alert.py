@@ -1,11 +1,13 @@
 import json
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
-import scripts.telegram_alert as telegram_alert
-from scripts.telegram_alert import format_observed_event_message
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import telegram_alert  # noqa: E402
+from telegram_alert import format_observed_event_message  # noqa: E402
 
 
 def _feature(event_id: str, magnitude: float, *, when: datetime | None = None) -> dict[str, object]:
